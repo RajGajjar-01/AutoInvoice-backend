@@ -1,15 +1,18 @@
 from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import jwt
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
+from jwt.exceptions import InvalidTokenError
+from pydantic import ValidationError
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core import security
 from app.core.config import settings
-from app.models import Message, NewPassword, Token, UserPublic, UserUpdate
+from app.models import Message, NewPassword, Token, TokenPayload, User, UserPublic, UserUpdate
 from app.utils import (
     generate_password_reset_token,
     generate_reset_password_email,
@@ -81,6 +84,7 @@ def test_token(current_user: CurrentUser) -> Any:
 @router.post("/login/refresh")
 def refresh_token(
     response: Response,
+    session: SessionDep,
     refresh_token: Annotated[str | None, Cookie()] = None,
 ) -> Token:
     """
@@ -102,11 +106,14 @@ def refresh_token(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-        
-    # TODO: In a real app, we should check if the user still exists and is active here too, 
-    # and potentially if the refresh token is in a deny-list.
-    # For now, we trust the signature and expiry.
     
+    # Verify the user still exists and is active
+    user = session.get(User, token_data.sub)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+        
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = security.create_access_token(
         token_data.sub, expires_delta=access_token_expires
