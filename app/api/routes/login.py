@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -22,7 +22,9 @@ router = APIRouter(tags=["login"])
 
 @router.post("/login/access-token")
 def login_access_token(
-    session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+    session: SessionDep,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    response: Response,
 ) -> Token:
     """
     OAuth2 compatible token login, get an access token for future requests
@@ -34,11 +36,37 @@ def login_access_token(
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(
+        user.id, expires_delta=access_token_expires
+    )
+    
+    refresh_token = security.create_refresh_token(
+        user.id, expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    )
+    
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT != "local",
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+    
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT != "local",
+        samesite="lax",
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path=f"{settings.API_V1_STR}/login/refresh",
+    )
+    
     return Token(
-        access_token=security.create_access_token(
-            user.id, expires_delta=access_token_expires
-        )
+        access_token=access_token
     )
 
 
@@ -48,6 +76,66 @@ def test_token(current_user: CurrentUser) -> Any:
     Test access token
     """
     return current_user
+
+
+@router.post("/login/refresh")
+def refresh_token(
+    response: Response,
+    refresh_token: Annotated[str | None, Cookie()] = None,
+) -> Token:
+    """
+    Refresh access token
+    """
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token missing",
+        )
+        
+    try:
+        payload = jwt.decode(
+            refresh_token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+        )
+        token_data = TokenPayload(**payload)
+    except (InvalidTokenError, ValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
+        
+    # TODO: In a real app, we should check if the user still exists and is active here too, 
+    # and potentially if the refresh token is in a deny-list.
+    # For now, we trust the signature and expiry.
+    
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(
+        token_data.sub, expires_delta=access_token_expires
+    )
+    
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT != "local",
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+    
+    return Token(access_token=access_token)
+
+
+@router.post("/login/logout")
+def logout(response: Response) -> Message:
+    """
+    Logout
+    """
+    response.delete_cookie(key="access_token")
+    # Must specify path to delete the cookie set with a path
+    response.delete_cookie(
+        key="refresh_token", 
+        path=f"{settings.API_V1_STR}/login/refresh",
+    )
+    return Message(message="Logged out successfully")
 
 
 @router.post("/password-recovery/{email}")

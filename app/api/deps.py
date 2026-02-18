@@ -23,8 +23,24 @@ def get_db() -> Generator[Session, None, None]:
         yield session
 
 
+from fastapi import Cookie
+
+def get_token(
+    access_token: Annotated[str | None, Cookie()] = None,
+    authorization: Annotated[str | None, Depends(reusable_oauth2)] = None,
+) -> str:
+    if access_token:
+        return access_token
+    if authorization:
+        return authorization
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+    )
+
+
 SessionDep = Annotated[Session, Depends(get_db)]
-TokenDep = Annotated[str, Depends(reusable_oauth2)]
+TokenDep = Annotated[str, Depends(get_token)]
 
 
 def get_current_user(session: SessionDep, token: TokenDep) -> User:

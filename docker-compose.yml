@@ -41,5 +41,4 @@ services:
 
 volumes:
   app-db-data:
-    external: true
-    name: full-stack-fastapi-template_app-db-data
+    name: fast-api-app
