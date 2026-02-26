@@ -1,13 +1,13 @@
 services:
   db:
-    image: postgres:18
+    image: postgres:16
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
-      interval: 10s
-      retries: 5
-      start_period: 30s
-      timeout: 10s
+      interval: 5s
+      retries: 10
+      start_period: 10s
+      timeout: 5s
     volumes:
       - app-db-data:/var/lib/postgresql/data/pgdata
     env_file:
@@ -18,27 +18,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - 5432:5432
-
-  # backend:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   restart: always
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     - POSTGRES_SERVER=db
-  #     - POSTGRES_PORT=${POSTGRES_PORT}
-  #     - POSTGRES_DB=${POSTGRES_DB}
-  #     - POSTGRES_USER=${POSTGRES_USER}
-  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-  #   ports:
-  #     - 8000:8000
+      - "5433:5432"
 
 volumes:
   app-db-data:
-    name: fast-api-app
+    name: autoinvoice-db-data
