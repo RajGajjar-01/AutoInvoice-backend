@@ -491,3 +491,76 @@ class DashboardStats(SQLModel):
     overdue_count: int = 0
     total_customers: int = 0
     total_revenue: float = 0
+
+
+# ──────────────────────────────────────────────────────────
+# Invoice Template Models
+# ──────────────────────────────────────────────────────────
+
+
+class InvoiceTemplateKind(str, Enum):
+    built_in = "built_in"
+    custom = "custom"
+    imported_html = "imported_html"
+    imported_pdf = "imported_pdf"
+
+
+class InvoiceTemplateBase(SQLModel):
+    name: str = Field(max_length=255)
+    kind: InvoiceTemplateKind
+    is_active: bool = False
+
+    # For built-in templates, store the built-in id
+    built_in_id: str | None = Field(default=None, max_length=100)
+
+    # For custom template builder payload
+    custom_data: dict | None = Field(default=None, sa_column=Column(JSONB))
+
+    # For imported templates
+    imported_html: str | None = None
+    imported_pdf_data_url: str | None = None
+
+
+class InvoiceTemplateCreate(InvoiceTemplateBase):
+    pass
+
+
+class InvoiceTemplateUpdate(SQLModel):
+    name: str | None = Field(default=None, max_length=255)
+    kind: InvoiceTemplateKind | None = None
+    is_active: bool | None = None
+
+    built_in_id: str | None = Field(default=None, max_length=100)
+    custom_data: dict | None = None
+    imported_html: str | None = None
+    imported_pdf_data_url: str | None = None
+
+
+class InvoiceTemplate(InvoiceTemplateBase, table=True):
+    __tablename__ = "invoice_templates"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
+    )
+
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+
+
+class InvoiceTemplatePublic(InvoiceTemplateBase):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class InvoiceTemplatesPublic(SQLModel):
+    data: list[InvoiceTemplatePublic]
+    count: int
