@@ -13,10 +13,11 @@ def user_authentication_headers(
     data = {"username": email, "password": password}
 
     r = client.post(f"{settings.API_V1_STR}/login/access-token", data=data)
-    response = r.json()
-    auth_token = response["access_token"]
-    headers = {"Authorization": f"Bearer {auth_token}"}
-    return headers
+    r.raise_for_status()
+    csrf_token = client.cookies.get("csrf_token")
+    if not csrf_token:
+        raise KeyError("csrf_token")
+    return {"X-CSRF-Token": csrf_token}
 
 
 def create_random_user(db: Session) -> User:

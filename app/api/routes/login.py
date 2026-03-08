@@ -12,7 +12,15 @@ from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core import security
 from app.core.config import settings
-from app.models import Message, NewPassword, Token, TokenPayload, User, UserPublic, UserUpdate
+from app.models import (
+    Message,
+    NewPassword,
+    Token,
+    TokenPayload,
+    User,
+    UserPublic,
+    UserUpdate,
+)
 from app.utils import (
     generate_password_reset_token,
     generate_reset_password_email,
@@ -39,35 +47,48 @@ def login_access_token(
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-    
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = security.create_access_token(
         user.id, expires_delta=access_token_expires
     )
-    
+
     refresh_token = security.create_refresh_token(
         user.id, expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     )
-    
+
+    csrf_token = security.create_csrf_token()
+
+    cookie_samesite = "lax" if settings.ENVIRONMENT == "local" else "none"
+
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
         secure=settings.ENVIRONMENT != "local",
-        samesite="lax",
+        samesite=cookie_samesite,
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
-    
+
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
         secure=settings.ENVIRONMENT != "local",
-        samesite="lax",
+        samesite=cookie_samesite,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path=f"{settings.API_V1_STR}/login/refresh",
     )
-    
+
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=settings.ENVIRONMENT != "local",
+        samesite=cookie_samesite,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    )
+
     return Token(
         access_token=access_token
     )
@@ -95,7 +116,7 @@ def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token missing",
         )
-        
+
     try:
         payload = jwt.decode(
             refresh_token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
@@ -106,28 +127,36 @@ def refresh_token(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-    
+
+    if token_data.type != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
+
     # Verify the user still exists and is active
     user = session.get(User, token_data.sub)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-        
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = security.create_access_token(
         token_data.sub, expires_delta=access_token_expires
     )
-    
+
+    cookie_samesite = "lax" if settings.ENVIRONMENT == "local" else "none"
+
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
         secure=settings.ENVIRONMENT != "local",
-        samesite="lax",
+        samesite=cookie_samesite,
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
-    
+
     return Token(access_token=access_token)
 
 
@@ -137,9 +166,10 @@ def logout(response: Response) -> Message:
     Logout
     """
     response.delete_cookie(key="access_token")
+    response.delete_cookie(key="csrf_token")
     # Must specify path to delete the cookie set with a path
     response.delete_cookie(
-        key="refresh_token", 
+        key="refresh_token",
         path=f"{settings.API_V1_STR}/login/refresh",
     )
     return Message(message="Logged out successfully")

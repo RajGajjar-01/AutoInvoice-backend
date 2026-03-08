@@ -3,7 +3,6 @@ from typing import Annotated
 
 import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlmodel import Session
@@ -13,11 +12,6 @@ from app.core.config import settings
 from app.core.db import engine
 from app.models import TokenPayload, User
 
-reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_STR}/login/access-token",
-    auto_error=False,
-)
-
 
 def get_db() -> Generator[Session, None, None]:
     with Session(engine) as session:
@@ -26,14 +20,12 @@ def get_db() -> Generator[Session, None, None]:
 
 from fastapi import Cookie
 
+
 def get_token(
     access_token: Annotated[str | None, Cookie()] = None,
-    authorization: Annotated[str | None, Depends(reusable_oauth2)] = None,
 ) -> str:
     if access_token:
         return access_token
-    if authorization:
-        return authorization
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated",
@@ -51,6 +43,11 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
         )
         token_data = TokenPayload(**payload)
     except (InvalidTokenError, ValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
+    if token_data.type != "access":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",

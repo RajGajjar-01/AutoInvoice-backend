@@ -20,7 +20,8 @@ def get_superuser_token_headers(client: TestClient) -> dict[str, str]:
         "password": settings.FIRST_SUPERUSER_PASSWORD,
     }
     r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
-    tokens = r.json()
-    a_token = tokens["access_token"]
-    headers = {"Authorization": f"Bearer {a_token}"}
-    return headers
+    r.raise_for_status()
+    csrf_token = client.cookies.get("csrf_token")
+    if not csrf_token:
+        raise KeyError("csrf_token")
+    return {"X-CSRF-Token": csrf_token}
