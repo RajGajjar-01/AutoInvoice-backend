@@ -2,7 +2,7 @@ import uuid
 from collections.abc import Generator
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import Session
 
@@ -24,9 +24,20 @@ def get_db() -> Generator[Session, None, None]:
 SessionDep = Annotated[Session, Depends(get_db)]
 
 
-def get_token_from_auth_header(
+def get_token_from_auth_header_or_cookie(
     authorization: Annotated[str | None, Header()] = None,
+    access_token: Annotated[str | None, Cookie()] = None,
 ) -> str:
+    """
+    Get access token from either cookie or Authorization header.
+
+    Priority:
+    1. HttpOnly cookie (preferred for security)
+    2. Authorization header (for backward compatibility)
+    """
+    if access_token:
+        return access_token
+
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -40,7 +51,7 @@ def get_token_from_auth_header(
     return authorization[7:]
 
 
-TokenDep = Annotated[str, Depends(get_token_from_auth_header)]
+TokenDep = Annotated[str, Depends(get_token_from_auth_header_or_cookie)]
 
 
 def get_current_user(session: SessionDep, token: TokenDep) -> Profile:
@@ -97,8 +108,8 @@ def get_current_user(session: SessionDep, token: TokenDep) -> Profile:
         if profile.is_verified != is_email_verified(payload):
             profile.is_verified = is_email_verified(payload)
             needs_update = True
-        if profile.email != email:
-            profile.email = email
+        if email and profile.email != email:
+            profile.email = str(email)
             needs_update = True
 
         user_metadata = get_user_metadata(payload)

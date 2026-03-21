@@ -1,10 +1,11 @@
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Cookie, Header, HTTPException, Response
 from sqlmodel import SQLModel
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
+from app.core.config import settings
 from app.core.supabase_client import auth_service
 from app.exceptions import (
     InvalidCredentialsError,
@@ -21,6 +22,10 @@ from app.models import (
     get_datetime_utc,
 )
 
+ACCESS_TOKEN_MAX_AGE = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60  # 15 min
+REFRESH_TOKEN_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60  # 7 days
+COOKIE_SECURE = settings.ENVIRONMENT != "local"  # False for localhost
+
 router = APIRouter(tags=["auth"])
 
 
@@ -30,20 +35,25 @@ class AuthResponse(Token):
     user: dict | None = None
 
 
-class OAuthURLResponse(SQLModel):
-    url: str
-    provider: str
+class EmailRequest(SQLModel):
+    email: str
+
+
+class LoginRequest(SQLModel):
+    email: str
+    password: str
 
 
 @router.post("/auth/signup", response_model=AuthResponse)
 async def signup(
+    response: Response,
     session: SessionDep,
     user_in: UserRegister,
 ) -> AuthResponse:
     """
     Sign up a new user via Supabase Auth.
 
-    Creates user in Supabase and returns session tokens.
+    Creates user in Supabase and returns session tokens as HttpOnly cookies.
     """
     try:
         result = await auth_service.sign_up(
@@ -78,9 +88,32 @@ async def signup(
             session.add(profile)
             session.commit()
 
+    access_token = result.get("access_token", "")
+    refresh_token_value = result.get("refresh_token")
+
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_MAX_AGE,
+        path="/",
+    )
+    if refresh_token_value:
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token_value,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            max_age=REFRESH_TOKEN_MAX_AGE,
+            path="/",
+        )
+
     return AuthResponse(
-        access_token=result.get("access_token", ""),
-        refresh_token=result.get("refresh_token"),
+        access_token="",
+        refresh_token=None,
         expires_in=result.get("expires_in"),
         user=user_data,
     )
@@ -88,19 +121,19 @@ async def signup(
 
 @router.post("/auth/login", response_model=AuthResponse)
 async def login(
-    email: str,
-    password: str,
+    response: Response,
     session: SessionDep,
+    body: LoginRequest,
 ) -> AuthResponse:
     """
     Login with email and password via Supabase Auth.
 
-    Returns access_token, refresh_token, and user info.
+    Returns access_token and refresh_token as HttpOnly cookies.
     """
     try:
         result = await auth_service.sign_in_with_password(
-            email=email,
-            password=password,
+            email=body.email,
+            password=body.password,
         )
     except Exception as e:
         parsed_error = parse_supabase_error(e)
@@ -122,16 +155,39 @@ async def login(
         if not profile:
             profile = Profile(
                 id=user_uuid,
-                email=user_data.get("email", email),
+                email=user_data.get("email", body.email),
                 full_name=user_data.get("user_metadata", {}).get("full_name"),
                 is_verified=bool(user_data.get("email_confirmed_at")),
             )
             session.add(profile)
             session.commit()
 
+    access_token = result.get("access_token", "")
+    refresh_token_value = result.get("refresh_token")
+
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_MAX_AGE,
+        path="/",
+    )
+    if refresh_token_value:
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token_value,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            max_age=REFRESH_TOKEN_MAX_AGE,
+            path="/",
+        )
+
     return AuthResponse(
-        access_token=result.get("access_token", ""),
-        refresh_token=result.get("refresh_token"),
+        access_token="",
+        refresh_token=None,
         expires_in=result.get("expires_in"),
         user=user_data,
     )
@@ -139,29 +195,57 @@ async def login(
 
 @router.post("/auth/refresh", response_model=AuthResponse)
 async def refresh_token(
-    refresh_token: str,
+    response: Response,
+    refresh_token: Annotated[str | None, Cookie()] = None,
 ) -> AuthResponse:
     """
-    Refresh access token using refresh token.
+    Refresh access token using refresh token from cookie.
     """
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token not found")
+
     try:
         result = await auth_service.refresh_session(refresh_token=refresh_token)
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
+    access_token = result.get("access_token", "")
+    refresh_token_value = result.get("refresh_token")
+
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_MAX_AGE,
+        path="/",
+    )
+    if refresh_token_value:
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token_value,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            max_age=REFRESH_TOKEN_MAX_AGE,
+            path="/",
+        )
+
     return AuthResponse(
-        access_token=result.get("access_token", ""),
-        refresh_token=result.get("refresh_token"),
+        access_token="",
+        refresh_token=None,
         expires_in=result.get("expires_in"),
     )
 
 
 @router.post("/auth/logout", response_model=Message)
 async def logout(
+    response: Response,
     authorization: str | None = Header(None),
 ) -> Message:
     """
-    Logout - invalidates the Supabase session.
+    Logout - invalidates the Supabase session and clears cookies.
     """
     if authorization and authorization.startswith("Bearer "):
         token = authorization[7:]
@@ -169,6 +253,9 @@ async def logout(
             await auth_service.sign_out(access_token=token)
         except Exception:
             pass
+
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/")
 
     return Message(message="Logged out successfully")
 
@@ -192,13 +279,13 @@ def get_current_user_info(current_user: CurrentUser) -> Any:
 
 @router.post("/auth/forgot-password", response_model=Message)
 async def forgot_password(
-    email: str,
+    body: EmailRequest,
 ) -> Message:
     """
     Request password reset email via Supabase.
     """
     try:
-        await auth_service.reset_password_email(email=email)
+        await auth_service.reset_password_email(email=body.email)
     except Exception:
         pass
 
@@ -212,24 +299,22 @@ async def update_password(
     current_user: CurrentUser,
     session: SessionDep,
     body: UpdatePassword,
-    authorization: str | None = Header(None),
+    access_token: Annotated[str | None, Cookie()] = None,
 ) -> Message:
     """
     Update user password.
 
-    Requires the current access token.
+    Uses access token from cookie.
     """
-    if not authorization or not authorization.startswith("Bearer "):
+    if not access_token:
         raise HTTPException(
             status_code=401,
             detail="Not authenticated",
         )
 
-    token = authorization[7:]
-
     try:
         await auth_service.update_user(
-            access_token=token,
+            access_token=access_token,
             password=body.new_password,
         )
     except Exception as e:
@@ -244,13 +329,13 @@ async def update_password(
 
 @router.post("/auth/resend-verification", response_model=Message)
 async def resend_verification(
-    email: str,
+    body: EmailRequest,
 ) -> Message:
     """
     Resend email verification.
     """
     try:
-        await auth_service.resend_verification_email(email=email)
+        await auth_service.resend_verification_email(email=body.email)
     except Exception:
         pass
 
