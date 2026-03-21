@@ -3,16 +3,17 @@ from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
-from app.models import User, UserCreate, UserUpdate
+from app.models import Profile, ProfileCreate
 from tests.utils.utils import random_email, random_lower_string
 
 
 def user_authentication_headers(
     *, client: TestClient, email: str, password: str
 ) -> dict[str, str]:
-    data = {"username": email, "password": password}
-
-    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=data)
+    r = client.post(
+        f"{settings.API_V1_STR}/auth/login",
+        json={"email": email, "password": password},
+    )
     r.raise_for_status()
     csrf_token = client.cookies.get("csrf_token")
     if not csrf_token:
@@ -20,12 +21,17 @@ def user_authentication_headers(
     return {"X-CSRF-Token": csrf_token}
 
 
-def create_random_user(db: Session) -> User:
+def create_random_profile(db: Session) -> Profile:
     email = random_email()
-    password = random_lower_string()
-    user_in = UserCreate(email=email, password=password)
-    user = crud.create_user(session=db, user_create=user_in)
-    return user
+    profile = Profile(
+        email=email,
+        full_name=random_lower_string(),
+        is_superuser=False,
+    )
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return profile
 
 
 def authentication_token_from_email(
@@ -36,15 +42,17 @@ def authentication_token_from_email(
 
     If the user doesn't exist it is created first.
     """
-    password = random_lower_string()
-    user = crud.get_user_by_email(session=db, email=email)
-    if not user:
-        user_in_create = UserCreate(email=email, password=password)
-        user = crud.create_user(session=db, user_create=user_in_create)
-    else:
-        user_in_update = UserUpdate(password=password)
-        if not user.id:
-            raise Exception("User id not set")
-        user = crud.update_user(session=db, db_user=user, user_in=user_in_update)
+    profile = crud.get_profile_by_email(session=db, email=email)
+    if not profile:
+        profile = Profile(
+            email=email,
+            full_name=random_lower_string(),
+            is_superuser=False,
+        )
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
 
-    return user_authentication_headers(client=client, email=email, password=password)
+    return user_authentication_headers(
+        client=client, email=email, password="testpassword123"
+    )

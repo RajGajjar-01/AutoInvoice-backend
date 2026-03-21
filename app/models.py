@@ -1,60 +1,56 @@
 import uuid
 from datetime import date, datetime, timezone
 from enum import Enum
+from typing import Any, Generic, TypeVar
 
 from pydantic import EmailStr
-from sqlalchemy import Column, DateTime, String
+from sqlalchemy import Column, DateTime, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
+
+T = TypeVar("T")
 
 
 def get_datetime_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# Shared properties
-class UserBase(SQLModel):
-    email: EmailStr = Field(unique=True, index=True, max_length=255)
-    is_active: bool = True
-    is_superuser: bool = False
+class ProfileBase(SQLModel):
     full_name: str | None = Field(default=None, max_length=255)
+    avatar_url: str | None = Field(default=None, max_length=500)
+    is_superuser: bool = Field(default=False)
 
 
-# Properties to receive via API on creation
-class UserCreate(UserBase):
-    password: str = Field(min_length=8, max_length=128)
+class ProfileCreate(ProfileBase):
+    pass
 
 
-class UserRegister(SQLModel):
-    email: EmailStr = Field(max_length=255)
-    password: str = Field(min_length=8, max_length=128)
+class ProfileUpdate(ProfileBase):
     full_name: str | None = Field(default=None, max_length=255)
+    avatar_url: str | None = Field(default=None, max_length=500)
+    is_superuser: bool | None = None
 
 
-# Properties to receive via API on update, all are optional
-class UserUpdate(UserBase):
-    email: EmailStr | None = Field(default=None, max_length=255)  # type: ignore
-    password: str | None = Field(default=None, min_length=8, max_length=128)
+class Profile(ProfileBase, table=True):
+    __tablename__ = "profiles"
 
-
-class UserUpdateMe(SQLModel):
-    full_name: str | None = Field(default=None, max_length=255)
-    email: EmailStr | None = Field(default=None, max_length=255)
-
-
-class UpdatePassword(SQLModel):
-    current_password: str = Field(min_length=8, max_length=128)
-    new_password: str = Field(min_length=8, max_length=128)
-
-
-# Database model, database table inferred from class name
-class User(UserBase, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    hashed_password: str
+    id: uuid.UUID = Field(
+        primary_key=True,
+        sa_column_kwargs={
+            "server_default": text("gen_random_uuid()"),
+        },
+    )
+    email: str = Field(max_length=255, index=True)
+    is_verified: bool = Field(default=False)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
+    updated_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+    )
+
     items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
     data_tables: list["DataTable"] = Relationship(
         back_populates="owner", cascade_delete=True
@@ -65,12 +61,48 @@ class User(UserBase, table=True):
     invoices: list["Invoice"] = Relationship(
         back_populates="owner", cascade_delete=True
     )
+    invoice_templates: list["InvoiceTemplate"] = Relationship(
+        back_populates="owner", cascade_delete=True
+    )
 
 
-# Properties to return via API, id is always required
-class UserPublic(UserBase):
+class ProfilePublic(ProfileBase):
     id: uuid.UUID
+    email: str
+    is_verified: bool = False
     created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ProfilesPublic(SQLModel):
+    data: list[ProfilePublic]
+    count: int
+
+
+class UserRegister(SQLModel):
+    email: EmailStr = Field(max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str | None = Field(default=None, max_length=255)
+
+
+class UserUpdateMe(SQLModel):
+    full_name: str | None = Field(default=None, max_length=255)
+    email: EmailStr | None = Field(default=None, max_length=255)
+
+
+class UpdatePassword(SQLModel):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class UserPublic(SQLModel):
+    id: uuid.UUID
+    email: str
+    full_name: str | None = None
+    avatar_url: str | None = None
+    is_superuser: bool = False
+    is_verified: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class UsersPublic(SQLModel):
@@ -78,36 +110,69 @@ class UsersPublic(SQLModel):
     count: int
 
 
-# Shared properties
+class Message(SQLModel):
+    message: str
+
+
+class Token(SQLModel):
+    access_token: str
+    token_type: str = "bearer"
+    refresh_token: str | None = None
+    expires_in: int | None = None
+
+
+class TokenPayload(SQLModel):
+    sub: str | None = None
+    email: str | None = None
+    role: str | None = None
+
+
+class AuthSession(SQLModel):
+    id: str
+    created_at: datetime | None = None
+    expires_at: datetime | None = None
+    user_agent: str | None = None
+    ip: str | None = None
+    is_current: bool = False
+
+
+class AuthIdentity(SQLModel):
+    id: str
+    provider: str
+    identity_data: dict[str, Any] | None = None
+
+
+class MFAFactor(SQLModel):
+    id: str
+    type: str
+    status: str
+
+
 class ItemBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
 
 
-# Properties to receive on item creation
 class ItemCreate(ItemBase):
     pass
 
 
-# Properties to receive on item update
 class ItemUpdate(ItemBase):
-    title: str | None = Field(default=None, min_length=1, max_length=255)  # type: ignore
+    title: str | None = Field(default=None, min_length=1, max_length=255)
 
 
-# Database model, database table inferred from class name
 class Item(ItemBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
     owner_id: uuid.UUID = Field(
-        foreign_key="user.id", nullable=False, ondelete="CASCADE"
+        foreign_key="profiles.id", nullable=False, ondelete="CASCADE"
     )
-    owner: User | None = Relationship(back_populates="items")
+    owner: Profile | None = Relationship(back_populates="items")
 
 
-# Properties to return via API, id is always required
 class ItemPublic(ItemBase):
     id: uuid.UUID
     owner_id: uuid.UUID
@@ -119,31 +184,6 @@ class ItemsPublic(SQLModel):
     count: int
 
 
-# Generic message
-class Message(SQLModel):
-    message: str
-
-
-# JSON payload containing access token
-class Token(SQLModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
-# Contents of JWT token
-class TokenPayload(SQLModel):
-    sub: str | None = None
-    type: str | None = None
-
-
-class NewPassword(SQLModel):
-    token: str
-    new_password: str = Field(min_length=8, max_length=128)
-
-
-# Data Tables Models
-
-# Shared schema for a single DataTable column definition
 class DataTableColumn(SQLModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=500)
@@ -152,58 +192,52 @@ class DataTableColumn(SQLModel):
     options: list[str] = Field(default_factory=list)
 
 
-# Shared properties for DataTable
 class DataTableBase(SQLModel):
     name: str = Field(min_length=1, max_length=255, index=True)
     description: str | None = Field(default=None, max_length=500)
-    columns: list[dict] = Field(sa_column=Column(JSONB, nullable=False))
+    columns: list[dict[str, Any]] = Field(sa_column=Column(JSONB, nullable=False))
 
 
-# Properties to receive via API on creation
 class DataTableCreate(DataTableBase):
     columns: list[DataTableColumn]
 
 
-# Properties to receive via API on update, all are optional
 class DataTableUpdate(SQLModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=500)
     columns: list[DataTableColumn] | None = None
 
 
-# Database model for DataTable
 class DataTable(DataTableBase, table=True):
     __tablename__ = "data_tables"
-    
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
-        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
+        foreign_key="profiles.id", nullable=False, index=True, ondelete="CASCADE"
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
-        index=True
+        sa_type=DateTime(timezone=True),
+        index=True,
     )
     updated_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
-    
-    # Relationships with cascade delete
-    owner: User | None = Relationship(back_populates="data_tables")
+
+    owner: Profile | None = Relationship(back_populates="data_tables")
     rows: list["TableRow"] = Relationship(
         back_populates="table",
         cascade_delete=True,
-        sa_relationship_kwargs={"passive_deletes": True}
+        sa_relationship_kwargs={"passive_deletes": True},
     )
     reminders: list["TableReminder"] = Relationship(
         back_populates="table",
         cascade_delete=True,
-        sa_relationship_kwargs={"passive_deletes": True}
+        sa_relationship_kwargs={"passive_deletes": True},
     )
 
 
-# Properties to return via API
 class DataTablePublic(DataTableBase):
     id: uuid.UUID
     owner_id: uuid.UUID
@@ -211,96 +245,78 @@ class DataTablePublic(DataTableBase):
     updated_at: datetime
 
 
-# DataTable with rows and reminders
 class DataTableWithRows(DataTablePublic):
     rows: list["TableRowPublic"]
     reminders: list["TableReminderPublic"]
 
 
-# Shared properties for TableRow
 class TableRowBase(SQLModel):
-    data: dict = Field(sa_column=Column(JSONB, nullable=False))
+    data: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
 
 
-# Properties to receive via API on creation
 class TableRowCreate(TableRowBase):
     pass
 
 
-# Properties to receive via API on update
 class TableRowUpdate(TableRowBase):
     pass
 
 
-# Database model for TableRow
 class TableRow(TableRowBase, table=True):
     __tablename__ = "table_rows"
-    
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     table_id: uuid.UUID = Field(
         foreign_key="data_tables.id",
         nullable=False,
         index=True,
-        ondelete="CASCADE"
+        ondelete="CASCADE",
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
-        index=True
+        sa_type=DateTime(timezone=True),
+        index=True,
     )
-    
-    # Relationship
+
     table: DataTable | None = Relationship(back_populates="rows")
 
 
-# Properties to return via API
 class TableRowPublic(TableRowBase):
     id: uuid.UUID
     table_id: uuid.UUID
     created_at: datetime
 
 
-# Shared properties for TableReminder
 class TableReminderBase(SQLModel):
-    reminder_data: dict = Field(sa_column=Column(JSONB, nullable=False))
+    reminder_data: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
 
 
-# Properties to receive via API on creation
 class TableReminderCreate(TableReminderBase):
     pass
 
 
-# Database model for TableReminder
 class TableReminder(TableReminderBase, table=True):
     __tablename__ = "table_reminders"
-    
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     table_id: uuid.UUID = Field(
         foreign_key="data_tables.id",
         nullable=False,
         index=True,
-        ondelete="CASCADE"
+        ondelete="CASCADE",
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
-    
-    # Relationship
+
     table: DataTable | None = Relationship(back_populates="reminders")
 
 
-# Properties to return via API
 class TableReminderPublic(TableReminderBase):
     id: uuid.UUID
     table_id: uuid.UUID
     created_at: datetime
-
-
-# Paginated response model
-from typing import Generic, TypeVar
-
-T = TypeVar('T')
 
 
 class PaginatedResponse(SQLModel, Generic[T]):
@@ -310,10 +326,6 @@ class PaginatedResponse(SQLModel, Generic[T]):
     page_size: int
     total_pages: int
 
-
-# ──────────────────────────────────────────────────────────
-# Customer Models
-# ──────────────────────────────────────────────────────────
 
 class CustomerBase(SQLModel):
     name: str = Field(min_length=1, max_length=255)
@@ -327,7 +339,10 @@ class CustomerBase(SQLModel):
     gstin: str | None = Field(default=None, max_length=50)
     gst: str | None = Field(default=None, max_length=50)
     state: str | None = Field(default=None, max_length=100)
-    tags: list[str] = Field(default_factory=list, sa_column=Column(JSONB, nullable=False, server_default="[]"))
+    tags: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSONB, nullable=False, server_default="[]"),
+    )
     opening_balance: float = Field(default=0)
     credit_limit: float | None = Field(default=None)
     payment_terms: str | None = Field(default=None, max_length=500)
@@ -362,18 +377,18 @@ class Customer(CustomerBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
-        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
+        foreign_key="profiles.id", nullable=False, index=True, ondelete="CASCADE"
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
     updated_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
 
-    owner: User | None = Relationship(back_populates="customers")
+    owner: Profile | None = Relationship(back_populates="customers")
     invoices: list["Invoice"] = Relationship(
         back_populates="customer", cascade_delete=True
     )
@@ -391,10 +406,6 @@ class CustomersPublic(SQLModel):
     count: int
 
 
-# ──────────────────────────────────────────────────────────
-# Invoice Models
-# ──────────────────────────────────────────────────────────
-
 class InvoiceStatus(str, Enum):
     unpaid = "unpaid"
     paid = "paid"
@@ -402,7 +413,6 @@ class InvoiceStatus(str, Enum):
 
 
 class InvoiceItemData(SQLModel):
-    """Schema for a single line item embedded in the invoice JSONB."""
     name: str
     description: str | None = None
     quantity: float = 1
@@ -447,22 +457,24 @@ class Invoice(InvoiceBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
-        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
+        foreign_key="profiles.id", nullable=False, index=True, ondelete="CASCADE"
     )
     customer_id: uuid.UUID = Field(
         foreign_key="customers.id", nullable=False, index=True, ondelete="CASCADE"
     )
-    items: list = Field(default=[], sa_column=Column(JSONB, nullable=False, server_default="[]"))
+    items: list[dict[str, Any]] = Field(
+        default=[], sa_column=Column(JSONB, nullable=False, server_default="[]")
+    )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
     updated_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
 
-    owner: User | None = Relationship(back_populates="invoices")
+    owner: Profile | None = Relationship(back_populates="invoices")
     customer: Customer | None = Relationship(back_populates="invoices")
 
 
@@ -493,11 +505,6 @@ class DashboardStats(SQLModel):
     total_revenue: float = 0
 
 
-# ──────────────────────────────────────────────────────────
-# Invoice Template Models
-# ──────────────────────────────────────────────────────────
-
-
 class InvoiceTemplateKind(str, Enum):
     built_in = "built_in"
     custom = "custom"
@@ -509,14 +516,8 @@ class InvoiceTemplateBase(SQLModel):
     name: str = Field(max_length=255)
     kind: InvoiceTemplateKind
     is_active: bool = False
-
-    # For built-in templates, store the built-in id
     built_in_id: str | None = Field(default=None, max_length=100)
-
-    # For custom template builder payload
-    custom_data: dict | None = Field(default=None, sa_column=Column(JSONB))
-
-    # For imported templates
+    custom_data: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     imported_html: str | None = None
     imported_pdf_data_url: str | None = None
 
@@ -529,9 +530,8 @@ class InvoiceTemplateUpdate(SQLModel):
     name: str | None = Field(default=None, max_length=255)
     kind: InvoiceTemplateKind | None = None
     is_active: bool | None = None
-
     built_in_id: str | None = Field(default=None, max_length=100)
-    custom_data: dict | None = None
+    custom_data: dict[str, Any] | None = None
     imported_html: str | None = None
     imported_pdf_data_url: str | None = None
 
@@ -541,17 +541,18 @@ class InvoiceTemplate(InvoiceTemplateBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
-        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
+        foreign_key="profiles.id", nullable=False, index=True, ondelete="CASCADE"
     )
-
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
     updated_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),
     )
+
+    owner: Profile | None = Relationship(back_populates="invoice_templates")
 
 
 class InvoiceTemplatePublic(InvoiceTemplateBase):

@@ -1,16 +1,19 @@
+import uuid
 from collections.abc import Generator
 from typing import Annotated
 
-import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from jwt.exceptions import InvalidTokenError
-from pydantic import ValidationError
 from sqlmodel import Session
 
-from app.core import security
-from app.core.config import settings
+from app import crud
 from app.core.db import engine
-from app.models import TokenPayload, User
+from app.core.supabase_auth import (
+    get_user_metadata,
+    is_email_verified,
+    verify_supabase_token,
+)
+from app.models import Profile
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -18,54 +21,115 @@ def get_db() -> Generator[Session, None, None]:
         yield session
 
 
-from fastapi import Cookie
-
-
-def get_token(
-    access_token: Annotated[str | None, Cookie()] = None,
-) -> str:
-    if access_token:
-        return access_token
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-    )
-
-
 SessionDep = Annotated[Session, Depends(get_db)]
-TokenDep = Annotated[str, Depends(get_token)]
 
 
-def get_current_user(session: SessionDep, token: TokenDep) -> User:
+def get_token_from_auth_header(
+    authorization: Annotated[str | None, Header()] = None,
+) -> str:
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication scheme",
+        )
+    return authorization[7:]
+
+
+TokenDep = Annotated[str, Depends(get_token_from_auth_header)]
+
+
+def get_current_user(session: SessionDep, token: TokenDep) -> Profile:
+    """
+    Get the current user from a Supabase JWT token.
+
+    Uses JWKS verification for asymmetric JWT validation.
+    The token is verified using Supabase's public keys.
+
+    If user doesn't exist in local profiles table, creates one from JWT claims.
+    """
     try:
-        payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
-        )
-        token_data = TokenPayload(**payload)
-    except (InvalidTokenError, ValidationError):
+        payload = verify_supabase_token(token)
+        user_id = payload.get("sub")
+        email = payload.get("email")
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid token: missing user ID",
+            )
+
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid user ID format",
+            )
+
+    except InvalidTokenError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate credentials",
+            detail=f"Could not validate credentials: {str(e)}",
         )
-    if token_data.type != "access":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate credentials",
+
+    profile = crud.get_profile_by_id(session=session, user_id=user_uuid)
+
+    if not profile:
+        user_metadata = get_user_metadata(payload)
+        profile = Profile(
+            id=user_uuid,
+            email=email or f"{user_id}@supabase",
+            full_name=user_metadata.get("full_name"),
+            avatar_url=user_metadata.get("avatar_url"),
+            is_verified=is_email_verified(payload),
+            is_superuser=False,
         )
-    user = session.get(User, token_data.sub)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return user
+        session.add(profile)
+        session.commit()
+        session.refresh(profile)
+    else:
+        needs_update = False
+        if profile.is_verified != is_email_verified(payload):
+            profile.is_verified = is_email_verified(payload)
+            needs_update = True
+        if profile.email != email:
+            profile.email = email
+            needs_update = True
+
+        user_metadata = get_user_metadata(payload)
+        if user_metadata.get("full_name") and profile.full_name != user_metadata.get(
+            "full_name"
+        ):
+            profile.full_name = user_metadata.get("full_name")
+            needs_update = True
+        if user_metadata.get("avatar_url") and profile.avatar_url != user_metadata.get(
+            "avatar_url"
+        ):
+            profile.avatar_url = user_metadata.get("avatar_url")
+            needs_update = True
+
+        if needs_update:
+            session.add(profile)
+            session.commit()
+            session.refresh(profile)
+
+    return profile
 
 
-CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUser = Annotated[Profile, Depends(get_current_user)]
 
 
-def get_current_active_superuser(current_user: CurrentUser) -> User:
+def get_current_active_superuser(current_user: CurrentUser) -> Profile:
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=403, detail="The user doesn't have enough privileges"
         )
     return current_user
+
+
+SuperUserDep = Annotated[Profile, Depends(get_current_active_superuser)]
