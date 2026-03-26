@@ -27,7 +27,7 @@ def upgrade():
     op.execute("DROP TABLE IF EXISTS table_rows CASCADE")
     op.execute("DROP TABLE IF EXISTS data_tables CASCADE")
     op.execute("DROP TABLE IF EXISTS item CASCADE")
-    op.execute("DROP TABLE IF EXISTS user CASCADE")
+    op.execute('DROP TABLE IF EXISTS "user" CASCADE')
 
     op.create_table(
         "user",
