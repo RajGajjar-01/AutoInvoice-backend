@@ -17,10 +17,6 @@ depends_on = None
 
 
 def upgrade():
-    # Clear any existing migration state for fresh start
-    op.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
-    op.execute("DROP TYPE IF EXISTS invoicetemplatekind CASCADE")
-
     op.create_table(
         "user",
         sa.Column("id", sa.UUID(as_uuid=False), primary_key=True),
@@ -152,8 +148,6 @@ def upgrade():
     op.create_index("ix_invoices_owner_id", "invoices", ["owner_id"])
     op.create_index("ix_invoices_customer_id", "invoices", ["customer_id"])
 
-    op.execute("DROP TYPE IF EXISTS invoicetemplatekind CASCADE")
-
     invoicetemplatekind = postgresql.ENUM(
         "built_in",
         "custom",
@@ -161,11 +155,9 @@ def upgrade():
         "imported_pdf",
         "imported_excel",
         name="invoicetemplatekind",
-        create_type=False,
+        create_type=True,
     )
-    op.execute(
-        "CREATE TYPE invoicetemplatekind AS ENUM ('built_in', 'custom', 'imported_html', 'imported_pdf', 'imported_excel')"
-    )
+    invoicetemplatekind.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "invoice_templates",
