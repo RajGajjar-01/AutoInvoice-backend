@@ -44,7 +44,7 @@ ENV PATH="/app/.venv/bin:${PATH}"
 
 EXPOSE $PORT
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
     CMD curl --fail http://localhost:${PORT:-8000}/health || exit 1
 
 CMD ["sh", "-c", "alembic upgrade head && gunicorn app.main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 120 --access-logfile - --log-level info"]
