@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "a1b2c3d4e5f6"
-down_revision = "4b5c6d7e8f9a"
+down_revision = "2c0c02ae8eff"
 branch_labels = None
 depends_on = None
 
@@ -107,7 +107,7 @@ def upgrade():
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["owner_id"], ["profiles.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["owner_id"], ["user.id"], ondelete="CASCADE"),
     )
     op.create_index(
         "ix_company_settings_owner_id", "company_settings", ["owner_id"], unique=True
@@ -128,7 +128,7 @@ def upgrade():
         sa.Column("read", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("scheduled_for", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["owner_id"], ["profiles.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["owner_id"], ["user.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_notifications_owner_id", "notifications", ["owner_id"])
     op.create_index("ix_notifications_created_at", "notifications", ["created_at"])
