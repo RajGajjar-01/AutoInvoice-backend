@@ -17,6 +17,18 @@ depends_on = None
 
 
 def upgrade():
+    op.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
+    op.execute("DROP TABLE IF EXISTS invoice_templates CASCADE")
+    op.execute("DROP TABLE IF EXISTS notifications CASCADE")
+    op.execute("DROP TABLE IF EXISTS company_settings CASCADE")
+    op.execute("DROP TABLE IF EXISTS invoices CASCADE")
+    op.execute("DROP TABLE IF EXISTS customers CASCADE")
+    op.execute("DROP TABLE IF EXISTS table_reminders CASCADE")
+    op.execute("DROP TABLE IF EXISTS table_rows CASCADE")
+    op.execute("DROP TABLE IF EXISTS data_tables CASCADE")
+    op.execute("DROP TABLE IF EXISTS item CASCADE")
+    op.execute("DROP TABLE IF EXISTS user CASCADE")
+
     op.create_table(
         "user",
         sa.Column("id", sa.UUID(as_uuid=False), primary_key=True),
@@ -148,23 +160,28 @@ def upgrade():
     op.create_index("ix_invoices_owner_id", "invoices", ["owner_id"])
     op.create_index("ix_invoices_customer_id", "invoices", ["customer_id"])
 
-    invoicetemplatekind = postgresql.ENUM(
-        "built_in",
-        "custom",
-        "imported_html",
-        "imported_pdf",
-        "imported_excel",
-        name="invoicetemplatekind",
-        create_type=True,
+    op.execute(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'invoicetemplatekind') THEN CREATE TYPE invoicetemplatekind AS ENUM ('built_in', 'custom', 'imported_html', 'imported_pdf', 'imported_excel'); END IF; END $$;"
     )
-    invoicetemplatekind.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "invoice_templates",
         sa.Column("id", sa.UUID(as_uuid=False), primary_key=True),
         sa.Column("owner_id", sa.UUID(as_uuid=False), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("kind", invoicetemplatekind, nullable=False),
+        sa.Column(
+            "kind",
+            postgresql.ENUM(
+                "built_in",
+                "custom",
+                "imported_html",
+                "imported_pdf",
+                "imported_excel",
+                name="invoicetemplatekind",
+                create_type=False,
+            ),
+            nullable=False,
+        ),
         sa.Column("is_active", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("built_in_id", sa.String(100), nullable=True),
         sa.Column("custom_data", postgresql.JSONB, nullable=True),
