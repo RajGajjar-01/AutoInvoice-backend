@@ -22,7 +22,8 @@ RUN uv sync --frozen --no-install-project --no-dev
 FROM python:3.13-slim-bookworm AS final
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
 
 WORKDIR /app
 
