@@ -17,18 +17,6 @@ depends_on = None
 
 
 def upgrade():
-    op.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
-    op.execute("DROP TABLE IF EXISTS invoice_templates CASCADE")
-    op.execute("DROP TABLE IF EXISTS notifications CASCADE")
-    op.execute("DROP TABLE IF EXISTS company_settings CASCADE")
-    op.execute("DROP TABLE IF EXISTS invoices CASCADE")
-    op.execute("DROP TABLE IF EXISTS customers CASCADE")
-    op.execute("DROP TABLE IF EXISTS table_reminders CASCADE")
-    op.execute("DROP TABLE IF EXISTS table_rows CASCADE")
-    op.execute("DROP TABLE IF EXISTS data_tables CASCADE")
-    op.execute("DROP TABLE IF EXISTS item CASCADE")
-    op.execute('DROP TABLE IF EXISTS "user" CASCADE')
-
     op.create_table(
         "user",
         sa.Column("id", sa.UUID(as_uuid=False), primary_key=True),
