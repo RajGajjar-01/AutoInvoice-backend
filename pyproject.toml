@@ -16,9 +16,9 @@ dependencies = [
     "psycopg[binary]<4.0.0,>=3.1.13",
     "sqlmodel<1.0.0,>=0.0.21",
     "pydantic-settings<3.0.0,>=2.2.1",
-    "sentry-sdk[fastapi]>=2.0.0,<3.0.0",
     "pyjwt<3.0.0,>=2.8.0",
-    "supabase>=2.6.0,<3.0.0",
+    "pwdlib[argon2]<1.0.0,>=0.2.0",
+    "openpyxl>=3.1.0",
 ]
 
 [dependency-groups]

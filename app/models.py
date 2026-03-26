@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Generic, TypeVar
 
 from pydantic import EmailStr
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -15,33 +15,29 @@ def get_datetime_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class ProfileBase(SQLModel):
+class UserBase(SQLModel):
+    email: EmailStr = Field(unique=True, index=True, max_length=255)
+    is_active: bool = True
+    is_superuser: bool = False
     full_name: str | None = Field(default=None, max_length=255)
-    avatar_url: str | None = Field(default=None, max_length=500)
-    is_superuser: bool = Field(default=False)
 
 
-class ProfileCreate(ProfileBase):
-    pass
+class UserCreate(UserBase):
+    password: str = Field(min_length=8, max_length=128)
 
 
-class ProfileUpdate(ProfileBase):
-    full_name: str | None = Field(default=None, max_length=255)
-    avatar_url: str | None = Field(default=None, max_length=500)
-    is_superuser: bool | None = None
+class UserUpdate(UserBase):
+    email: EmailStr | None = Field(default=None, max_length=255)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
-class Profile(ProfileBase, table=True):
-    __tablename__ = "profiles"
+class User(UserBase, table=True):
+    __tablename__ = "user"
 
-    id: uuid.UUID = Field(
-        primary_key=True,
-        sa_column_kwargs={
-            "server_default": text("gen_random_uuid()"),
-        },
-    )
-    email: str = Field(max_length=255, index=True)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    hashed_password: str
     is_verified: bool = Field(default=False)
+    avatar_url: str | None = Field(default=None, max_length=500)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),
@@ -64,18 +60,26 @@ class Profile(ProfileBase, table=True):
     invoice_templates: list["InvoiceTemplate"] = Relationship(
         back_populates="owner", cascade_delete=True
     )
+    company_settings: "CompanySettings" = Relationship(
+        back_populates="owner",
+        cascade_delete=True,
+        sa_relationship_kwargs={"uselist": False},
+    )
+    notifications: list["Notification"] = Relationship(
+        back_populates="owner", cascade_delete=True
+    )
 
 
-class ProfilePublic(ProfileBase):
+class UserPublic(UserBase):
     id: uuid.UUID
-    email: str
     is_verified: bool = False
+    avatar_url: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
 
-class ProfilesPublic(SQLModel):
-    data: list[ProfilePublic]
+class UsersPublic(SQLModel):
+    data: list[UserPublic]
     count: int
 
 
@@ -91,23 +95,8 @@ class UserUpdateMe(SQLModel):
 
 
 class UpdatePassword(SQLModel):
+    current_password: str = Field(min_length=8, max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
-
-
-class UserPublic(SQLModel):
-    id: uuid.UUID
-    email: str
-    full_name: str | None = None
-    avatar_url: str | None = None
-    is_superuser: bool = False
-    is_verified: bool = False
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-
-class UsersPublic(SQLModel):
-    data: list[UserPublic]
-    count: int
 
 
 class Message(SQLModel):
@@ -123,60 +112,69 @@ class Token(SQLModel):
 
 class TokenPayload(SQLModel):
     sub: str | None = None
-    email: str | None = None
-    role: str | None = None
 
 
-class AuthSession(SQLModel):
-    id: str
-    created_at: datetime | None = None
-    expires_at: datetime | None = None
-    user_agent: str | None = None
-    ip: str | None = None
-    is_current: bool = False
-
-
-class AuthIdentity(SQLModel):
-    id: str
-    provider: str
-    identity_data: dict[str, Any] | None = None
-
-
-class MFAFactor(SQLModel):
-    id: str
-    type: str
-    status: str
+class NewPassword(SQLModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class ItemBase(SQLModel):
-    title: str = Field(min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=255)
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=500)
+    category: str | None = Field(default=None, max_length=100)
+    sku: str | None = Field(default=None, max_length=50)
+    unit: str | None = Field(default=None, max_length=20)
+    price: float = Field(default=0)
+    tax_rate: float = Field(default=0)
+    stock: float = Field(default=0)
+    low_stock_threshold: float = Field(default=5)
+    stock_history: list[dict[str, Any]] = Field(
+        default_factory=list,
+        sa_column=Column(JSONB, nullable=False, server_default="[]"),
+    )
 
 
 class ItemCreate(ItemBase):
     pass
 
 
-class ItemUpdate(ItemBase):
-    title: str | None = Field(default=None, min_length=1, max_length=255)
+class ItemUpdate(SQLModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=500)
+    category: str | None = Field(default=None, max_length=100)
+    sku: str | None = Field(default=None, max_length=50)
+    unit: str | None = Field(default=None, max_length=20)
+    price: float | None = None
+    tax_rate: float | None = None
+    stock: float | None = None
+    low_stock_threshold: float | None = None
+    stock_history: list[dict[str, Any]] | None = None
 
 
 class Item(ItemBase, table=True):
+    __tablename__ = "item"
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime | None = Field(
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+    )
+    updated_at: datetime = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),
     )
     owner_id: uuid.UUID = Field(
-        foreign_key="profiles.id", nullable=False, ondelete="CASCADE"
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
     )
-    owner: Profile | None = Relationship(back_populates="items")
+    owner: User | None = Relationship(back_populates="items")
 
 
 class ItemPublic(ItemBase):
     id: uuid.UUID
     owner_id: uuid.UUID
-    created_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class ItemsPublic(SQLModel):
@@ -213,7 +211,7 @@ class DataTable(DataTableBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
-        foreign_key="profiles.id", nullable=False, index=True, ondelete="CASCADE"
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
@@ -225,7 +223,7 @@ class DataTable(DataTableBase, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    owner: Profile | None = Relationship(back_populates="data_tables")
+    owner: User | None = Relationship(back_populates="data_tables")
     rows: list["TableRow"] = Relationship(
         back_populates="table",
         cascade_delete=True,
@@ -377,7 +375,7 @@ class Customer(CustomerBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
-        foreign_key="profiles.id", nullable=False, index=True, ondelete="CASCADE"
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
@@ -388,7 +386,7 @@ class Customer(CustomerBase, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    owner: Profile | None = Relationship(back_populates="customers")
+    owner: User | None = Relationship(back_populates="customers")
     invoices: list["Invoice"] = Relationship(
         back_populates="customer", cascade_delete=True
     )
@@ -406,10 +404,21 @@ class CustomersPublic(SQLModel):
     count: int
 
 
+class DocumentType(str, Enum):
+    invoice = "invoice"
+    quotation = "quotation"
+    proforma = "proforma"
+    challan = "challan"
+
+
 class InvoiceStatus(str, Enum):
     unpaid = "unpaid"
     paid = "paid"
     overdue = "overdue"
+    draft = "draft"
+    expired = "expired"
+    accepted = "accepted"
+    rejected = "rejected"
 
 
 class InvoiceItemData(SQLModel):
@@ -418,19 +427,26 @@ class InvoiceItemData(SQLModel):
     quantity: float = 1
     price: float = 0
     tax: float = 0
+    unit: str | None = None
+    hsn_code: str | None = None
 
 
 class InvoiceBase(SQLModel):
     invoice_number: str = Field(max_length=50)
+    document_type: DocumentType = DocumentType.invoice
     invoice_date: date
     due_date: date | None = None
+    valid_until: date | None = None
     currency: str = Field(default="INR", max_length=10)
     subtotal: float = 0
     total_tax: float = 0
     grand_total: float = 0
+    discount: float = 0
     notes: str | None = Field(default=None, max_length=2000)
     payment_terms: str | None = Field(default=None, max_length=500)
     status: InvoiceStatus = InvoiceStatus.unpaid
+    place_of_supply: str | None = Field(default=None, max_length=100)
+    reverse_charge: bool = False
 
 
 class InvoiceCreate(InvoiceBase):
@@ -439,15 +455,21 @@ class InvoiceCreate(InvoiceBase):
 
 
 class InvoiceUpdate(SQLModel):
+    invoice_number: str | None = Field(default=None, max_length=50)
+    document_type: DocumentType | None = None
     invoice_date: date | None = None
     due_date: date | None = None
+    valid_until: date | None = None
     currency: str | None = Field(default=None, max_length=10)
     subtotal: float | None = None
     total_tax: float | None = None
     grand_total: float | None = None
+    discount: float | None = None
     notes: str | None = Field(default=None, max_length=2000)
     payment_terms: str | None = Field(default=None, max_length=500)
     status: InvoiceStatus | None = None
+    place_of_supply: str | None = Field(default=None, max_length=100)
+    reverse_charge: bool | None = None
     customer_id: uuid.UUID | None = None
     items: list[InvoiceItemData] | None = None
 
@@ -457,7 +479,7 @@ class Invoice(InvoiceBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
-        foreign_key="profiles.id", nullable=False, index=True, ondelete="CASCADE"
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
     )
     customer_id: uuid.UUID = Field(
         foreign_key="customers.id", nullable=False, index=True, ondelete="CASCADE"
@@ -474,7 +496,7 @@ class Invoice(InvoiceBase, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    owner: Profile | None = Relationship(back_populates="invoices")
+    owner: User | None = Relationship(back_populates="invoices")
     customer: Customer | None = Relationship(back_populates="invoices")
 
 
@@ -510,6 +532,7 @@ class InvoiceTemplateKind(str, Enum):
     custom = "custom"
     imported_html = "imported_html"
     imported_pdf = "imported_pdf"
+    imported_excel = "imported_excel"
 
 
 class InvoiceTemplateBase(SQLModel):
@@ -520,6 +543,12 @@ class InvoiceTemplateBase(SQLModel):
     custom_data: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     imported_html: str | None = None
     imported_pdf_data_url: str | None = None
+    imported_excel_columns: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSONB)
+    )
+    imported_excel_data: list[dict[str, Any]] | None = Field(
+        default=None, sa_column=Column(JSONB)
+    )
 
 
 class InvoiceTemplateCreate(InvoiceTemplateBase):
@@ -534,6 +563,8 @@ class InvoiceTemplateUpdate(SQLModel):
     custom_data: dict[str, Any] | None = None
     imported_html: str | None = None
     imported_pdf_data_url: str | None = None
+    imported_excel_columns: dict[str, Any] | None = None
+    imported_excel_data: list[dict[str, Any]] | None = None
 
 
 class InvoiceTemplate(InvoiceTemplateBase, table=True):
@@ -541,7 +572,7 @@ class InvoiceTemplate(InvoiceTemplateBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
-        foreign_key="profiles.id", nullable=False, index=True, ondelete="CASCADE"
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
@@ -552,7 +583,7 @@ class InvoiceTemplate(InvoiceTemplateBase, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    owner: Profile | None = Relationship(back_populates="invoice_templates")
+    owner: User | None = Relationship(back_populates="invoice_templates")
 
 
 class InvoiceTemplatePublic(InvoiceTemplateBase):
@@ -565,3 +596,152 @@ class InvoiceTemplatePublic(InvoiceTemplateBase):
 class InvoiceTemplatesPublic(SQLModel):
     data: list[InvoiceTemplatePublic]
     count: int
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Company Settings
+# ───────────────────────────────────────────────────────────────────────────────
+
+
+class CompanySettingsBase(SQLModel):
+    name: str = Field(min_length=1, max_length=255)
+    gstin: str | None = Field(default=None, max_length=50)
+    pan: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=500)
+    city: str | None = Field(default=None, max_length=100)
+    state: str | None = Field(default=None, max_length=100)
+    pincode: str | None = Field(default=None, max_length=20)
+    phone: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=255)
+    website: str | None = Field(default=None, max_length=255)
+    logo_url: str | None = Field(default=None, max_length=500)
+    signature_url: str | None = Field(default=None, max_length=500)
+    bank_name: str | None = Field(default=None, max_length=100)
+    bank_account: str | None = Field(default=None, max_length=50)
+    bank_ifsc: str | None = Field(default=None, max_length=20)
+    bank_branch: str | None = Field(default=None, max_length=100)
+    upi_id: str | None = Field(default=None, max_length=50)
+    terms_and_conditions: str | None = Field(default=None, max_length=2000)
+    invoice_prefix: str = Field(default="INV-", max_length=20)
+    quotation_prefix: str = Field(default="QUO-", max_length=20)
+    proforma_prefix: str = Field(default="PRO-", max_length=20)
+    challan_prefix: str = Field(default="CHL-", max_length=20)
+
+
+class CompanySettingsCreate(CompanySettingsBase):
+    pass
+
+
+class CompanySettingsUpdate(SQLModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    gstin: str | None = Field(default=None, max_length=50)
+    pan: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=500)
+    city: str | None = Field(default=None, max_length=100)
+    state: str | None = Field(default=None, max_length=100)
+    pincode: str | None = Field(default=None, max_length=20)
+    phone: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=255)
+    website: str | None = Field(default=None, max_length=255)
+    logo_url: str | None = Field(default=None, max_length=500)
+    signature_url: str | None = Field(default=None, max_length=500)
+    bank_name: str | None = Field(default=None, max_length=100)
+    bank_account: str | None = Field(default=None, max_length=50)
+    bank_ifsc: str | None = Field(default=None, max_length=20)
+    bank_branch: str | None = Field(default=None, max_length=100)
+    upi_id: str | None = Field(default=None, max_length=50)
+    terms_and_conditions: str | None = Field(default=None, max_length=2000)
+    invoice_prefix: str | None = Field(default=None, max_length=20)
+    quotation_prefix: str | None = Field(default=None, max_length=20)
+    proforma_prefix: str | None = Field(default=None, max_length=20)
+    challan_prefix: str | None = Field(default=None, max_length=20)
+
+
+class CompanySettings(CompanySettingsBase, table=True):
+    __tablename__ = "company_settings"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id",
+        nullable=False,
+        unique=True,
+        index=True,
+        ondelete="CASCADE",
+    )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+    )
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+    )
+
+    owner: User | None = Relationship(back_populates="company_settings")
+
+
+class CompanySettingsPublic(CompanySettingsBase):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Notifications
+# ───────────────────────────────────────────────────────────────────────────────
+
+
+class NotificationType(str, Enum):
+    reminder = "reminder"
+    due_date = "due_date"
+    expiry = "expiry"
+    info = "info"
+
+
+class NotificationBase(SQLModel):
+    type: NotificationType = NotificationType.info
+    title: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=1000)
+    table_id: uuid.UUID | None = None
+    table_name: str | None = Field(default=None, max_length=255)
+    row_id: uuid.UUID | None = None
+    row_label: str | None = Field(default=None, max_length=255)
+    read: bool = False
+    scheduled_for: datetime | None = None
+
+
+class NotificationCreate(NotificationBase):
+    pass
+
+
+class NotificationUpdate(SQLModel):
+    read: bool | None = None
+
+
+class Notification(NotificationBase, table=True):
+    __tablename__ = "notifications"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, index=True, ondelete="CASCADE"
+    )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+        index=True,
+    )
+
+    owner: User | None = Relationship(back_populates="notifications")
+
+
+class NotificationPublic(NotificationBase):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    created_at: datetime
+
+
+class NotificationsPublic(SQLModel):
+    data: list[NotificationPublic]
+    count: int
+    unread_count: int

@@ -75,32 +75,40 @@ def upgrade():
     op.execute("ALTER TABLE items_new RENAME TO item")
     op.execute("CREATE INDEX ix_item_owner_id ON item(owner_id)")
 
-    op.execute('DROP TABLE "user"')
+    # Drop foreign key constraints first before dropping user table
+    op.execute(
+        "ALTER TABLE data_tables DROP CONSTRAINT IF EXISTS data_tables_owner_id_fkey"
+    )
+    op.execute(
+        "ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_owner_id_fkey"
+    )
+    op.execute("ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_owner_id_fkey")
+    op.execute(
+        "ALTER TABLE invoice_templates DROP CONSTRAINT IF EXISTS invoice_templates_owner_id_fkey"
+    )
+
+    op.execute('DROP TABLE IF EXISTS "user" CASCADE')
 
     op.execute("""
         ALTER TABLE data_tables 
-        DROP CONSTRAINT IF EXISTS data_tables_owner_id_fkey,
         ADD CONSTRAINT data_tables_owner_id_fkey 
         FOREIGN KEY (owner_id) REFERENCES profiles(id) ON DELETE CASCADE
     """)
 
     op.execute("""
         ALTER TABLE customers 
-        DROP CONSTRAINT IF EXISTS customers_owner_id_fkey,
         ADD CONSTRAINT customers_owner_id_fkey 
         FOREIGN KEY (owner_id) REFERENCES profiles(id) ON DELETE CASCADE
     """)
 
     op.execute("""
         ALTER TABLE invoices 
-        DROP CONSTRAINT IF EXISTS invoices_owner_id_fkey,
         ADD CONSTRAINT invoices_owner_id_fkey 
         FOREIGN KEY (owner_id) REFERENCES profiles(id) ON DELETE CASCADE
     """)
 
     op.execute("""
         ALTER TABLE invoice_templates 
-        DROP CONSTRAINT IF EXISTS invoice_templates_owner_id_fkey,
         ADD CONSTRAINT invoice_templates_owner_id_fkey 
         FOREIGN KEY (owner_id) REFERENCES profiles(id) ON DELETE CASCADE
     """)

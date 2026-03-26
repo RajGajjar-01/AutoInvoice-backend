@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -15,6 +15,7 @@ from app.models import (
     Message,
     get_datetime_utc,
 )
+from app.utils import parse_excel_file
 
 router = APIRouter(prefix="/invoice-templates", tags=["invoice-templates"])
 
@@ -22,27 +23,82 @@ router = APIRouter(prefix="/invoice-templates", tags=["invoice-templates"])
 def _ensure_valid_payload(template: InvoiceTemplate) -> None:
     if template.kind == InvoiceTemplateKind.built_in:
         if not template.built_in_id:
-            raise HTTPException(status_code=422, detail="built_in_id is required for kind=built_in")
-        if template.custom_data is not None or template.imported_html or template.imported_pdf_data_url:
-            raise HTTPException(status_code=422, detail="built_in templates cannot include custom/imported data")
+            raise HTTPException(
+                status_code=422, detail="built_in_id is required for kind=built_in"
+            )
+        if (
+            template.custom_data is not None
+            or template.imported_html
+            or template.imported_pdf_data_url
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="built_in templates cannot include custom/imported data",
+            )
 
     if template.kind == InvoiceTemplateKind.custom:
         if template.custom_data is None:
-            raise HTTPException(status_code=422, detail="custom_data is required for kind=custom")
-        if template.built_in_id or template.imported_html or template.imported_pdf_data_url:
-            raise HTTPException(status_code=422, detail="custom templates cannot include built_in/imported data")
+            raise HTTPException(
+                status_code=422, detail="custom_data is required for kind=custom"
+            )
+        if (
+            template.built_in_id
+            or template.imported_html
+            or template.imported_pdf_data_url
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="custom templates cannot include built_in/imported data",
+            )
 
     if template.kind == InvoiceTemplateKind.imported_html:
         if not template.imported_html:
-            raise HTTPException(status_code=422, detail="imported_html is required for kind=imported_html")
-        if template.built_in_id or template.custom_data is not None or template.imported_pdf_data_url:
-            raise HTTPException(status_code=422, detail="imported_html templates cannot include other template data")
+            raise HTTPException(
+                status_code=422,
+                detail="imported_html is required for kind=imported_html",
+            )
+        if (
+            template.built_in_id
+            or template.custom_data is not None
+            or template.imported_pdf_data_url
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="imported_html templates cannot include other template data",
+            )
 
     if template.kind == InvoiceTemplateKind.imported_pdf:
         if not template.imported_pdf_data_url:
-            raise HTTPException(status_code=422, detail="imported_pdf_data_url is required for kind=imported_pdf")
-        if template.built_in_id or template.custom_data is not None or template.imported_html:
-            raise HTTPException(status_code=422, detail="imported_pdf templates cannot include other template data")
+            raise HTTPException(
+                status_code=422,
+                detail="imported_pdf_data_url is required for kind=imported_pdf",
+            )
+        if (
+            template.built_in_id
+            or template.custom_data is not None
+            or template.imported_html
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="imported_pdf templates cannot include other template data",
+            )
+
+    if template.kind == InvoiceTemplateKind.imported_excel:
+        if template.imported_excel_columns is None:
+            raise HTTPException(
+                status_code=422,
+                detail="imported_excel_columns is required for kind=imported_excel",
+            )
+        if (
+            template.built_in_id
+            or template.custom_data is not None
+            or template.imported_html
+            or template.imported_pdf_data_url
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="imported_excel templates cannot include other template data",
+            )
 
 
 @router.get("/", response_model=InvoiceTemplatesPublic)
@@ -78,7 +134,9 @@ def read_active_invoice_template(session: SessionDep, current_user: CurrentUser)
 
 
 @router.get("/{id}", response_model=InvoiceTemplatePublic)
-def read_invoice_template(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> Any:
+def read_invoice_template(
+    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Any:
     t = session.get(InvoiceTemplate, id)
     if not t:
         raise HTTPException(status_code=404, detail="Invoice template not found")
@@ -94,12 +152,16 @@ def create_invoice_template(
     current_user: CurrentUser,
     template_in: InvoiceTemplateCreate,
 ) -> Any:
-    t = InvoiceTemplate.model_validate(template_in, update={"owner_id": current_user.id})
+    t = InvoiceTemplate.model_validate(
+        template_in, update={"owner_id": current_user.id}
+    )
     _ensure_valid_payload(t)
 
     # If creating an active template, deactivate others first
     if t.is_active:
-        stmt = select(InvoiceTemplate).where(InvoiceTemplate.owner_id == current_user.id)
+        stmt = select(InvoiceTemplate).where(
+            InvoiceTemplate.owner_id == current_user.id
+        )
         others = session.exec(stmt).all()
         for o in others:
             if o.is_active:
@@ -154,7 +216,9 @@ def update_invoice_template(
 
 
 @router.post("/{id}/activate", response_model=InvoiceTemplatePublic)
-def activate_invoice_template(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> Any:
+def activate_invoice_template(
+    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Any:
     t = session.get(InvoiceTemplate, id)
     if not t:
         raise HTTPException(status_code=404, detail="Invoice template not found")
@@ -178,7 +242,9 @@ def activate_invoice_template(session: SessionDep, current_user: CurrentUser, id
 
 
 @router.delete("/{id}")
-def delete_invoice_template(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) -> Message:
+def delete_invoice_template(
+    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+) -> Message:
     t = session.get(InvoiceTemplate, id)
     if not t:
         raise HTTPException(status_code=404, detail="Invoice template not found")
@@ -188,3 +254,39 @@ def delete_invoice_template(session: SessionDep, current_user: CurrentUser, id: 
     session.delete(t)
     session.commit()
     return Message(message="Invoice template deleted successfully")
+
+
+@router.post("/parse-excel")
+def parse_excel_preview(
+    _session: SessionDep,
+    _current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> Any:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    allowed_extensions = [".xlsx", ".xls"]
+    if not any(file.filename.lower().endswith(ext) for ext in allowed_extensions):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Please upload an Excel file (.xlsx or .xls)",
+        )
+
+    try:
+        file_content = file.file.read()
+        if len(file_content) == 0:
+            raise HTTPException(status_code=400, detail="Empty file provided")
+
+        result = parse_excel_file(file_content)
+
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error parsing Excel file: {str(e)}"
+        )

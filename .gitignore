@@ -7,3 +7,6 @@ htmlcov
 .cache
 .venv
 .env
+.env.local
+*.local
+.ruff_cache

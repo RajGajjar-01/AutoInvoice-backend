@@ -15,13 +15,12 @@ def random_email() -> str:
 
 
 def get_superuser_token_headers(client: TestClient) -> dict[str, str]:
-    login_data = {
-        "username": settings.FIRST_SUPERUSER,
-        "password": settings.FIRST_SUPERUSER_PASSWORD,
-    }
-    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
+    r = client.post(
+        f"{settings.API_V1_STR}/auth/login",
+        json={
+            "email": settings.FIRST_SUPERUSER,
+            "password": settings.FIRST_SUPERUSER_PASSWORD,
+        },
+    )
     r.raise_for_status()
-    csrf_token = client.cookies.get("csrf_token")
-    if not csrf_token:
-        raise KeyError("csrf_token")
-    return {"X-CSRF-Token": csrf_token}
+    return {"Authorization": f"Bearer {client.cookies.get('access_token')}"}

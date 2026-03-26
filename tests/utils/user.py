@@ -3,7 +3,7 @@ from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
-from app.models import Profile, ProfileCreate
+from app.models import User, UserCreate
 from tests.utils.utils import random_email, random_lower_string
 
 
@@ -15,44 +15,31 @@ def user_authentication_headers(
         json={"email": email, "password": password},
     )
     r.raise_for_status()
-    csrf_token = client.cookies.get("csrf_token")
-    if not csrf_token:
-        raise KeyError("csrf_token")
-    return {"X-CSRF-Token": csrf_token}
+    return {"Authorization": f"Bearer {client.cookies.get('access_token')}"}
 
 
-def create_random_profile(db: Session) -> Profile:
+def create_random_user(db: Session) -> User:
     email = random_email()
-    profile = Profile(
+    password = random_lower_string()
+    user_create = UserCreate(
         email=email,
+        password=password,
         full_name=random_lower_string(),
-        is_superuser=False,
     )
-    db.add(profile)
-    db.commit()
-    db.refresh(profile)
-    return profile
+    user = crud.create_user(session=db, user_create=user_create)
+    return user
 
 
 def authentication_token_from_email(
-    *, client: TestClient, email: str, db: Session
+    *, client: TestClient, email: str, db: Session, password: str = "testpassword123"
 ) -> dict[str, str]:
-    """
-    Return a valid token for the user with given email.
-
-    If the user doesn't exist it is created first.
-    """
-    profile = crud.get_profile_by_email(session=db, email=email)
-    if not profile:
-        profile = Profile(
+    user = crud.get_user_by_email(session=db, email=email)
+    if not user:
+        user_create = UserCreate(
             email=email,
+            password=password,
             full_name=random_lower_string(),
-            is_superuser=False,
         )
-        db.add(profile)
-        db.commit()
-        db.refresh(profile)
+        user = crud.create_user(session=db, user_create=user_create)
 
-    return user_authentication_headers(
-        client=client, email=email, password="testpassword123"
-    )
+    return user_authentication_headers(client=client, email=email, password=password)

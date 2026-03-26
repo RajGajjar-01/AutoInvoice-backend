@@ -1,18 +1,20 @@
-from sqlmodel import Session, create_engine
+from sqlmodel import Session, create_engine, select
 
+from app import crud
 from app.core.config import settings
+from app.models import User, UserCreate
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
 
 def init_db(session: Session) -> None:
-    """
-    Initialize database.
-
-    With Supabase Auth, users are created in Supabase and synced to
-    the local profiles table via JWT verification or triggers.
-
-    This function is kept for compatibility but doesn't create users
-    locally anymore - Supabase handles all user creation.
-    """
-    pass
+    user = session.exec(
+        select(User).where(User.email == settings.FIRST_SUPERUSER)
+    ).first()
+    if not user:
+        user_in = UserCreate(
+            email=settings.FIRST_SUPERUSER,
+            password=settings.FIRST_SUPERUSER_PASSWORD,
+            is_superuser=True,
+        )
+        user = crud.create_user(session=session, user_create=user_in)

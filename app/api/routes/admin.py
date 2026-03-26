@@ -1,17 +1,20 @@
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import EmailStr
 from sqlmodel import SQLModel
 
+from app import crud
 from app.api.deps import SessionDep, SuperUserDep
-from app.core.supabase_client import admin_auth_service
-from app.exceptions import parse_supabase_error
+from app.core.security import get_password_hash
 from app.models import (
-    AuthSession,
     Message,
     PaginatedResponse,
+    User,
+    UserCreate,
     UserPublic,
+    UserUpdate,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -21,7 +24,7 @@ class AdminUserCreate(SQLModel):
     email: EmailStr
     password: str
     full_name: str | None = None
-    email_confirm: bool = True
+    is_superuser: bool = False
 
 
 class AdminUserUpdate(SQLModel):
@@ -29,258 +32,134 @@ class AdminUserUpdate(SQLModel):
     password: str | None = None
     full_name: str | None = None
     is_superuser: bool | None = None
-    ban_duration: str | None = None
+    is_active: bool | None = None
 
 
 @router.get("/users", response_model=PaginatedResponse[UserPublic])
-async def list_users(
+def list_users(
+    session: SessionDep,
     superuser: SuperUserDep,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ) -> PaginatedResponse[UserPublic]:
-    """
-    List all users (paginated).
+    from sqlmodel import col, func, select
 
-    Requires superuser privileges.
-    """
-    try:
-        result = await admin_auth_service.list_users(
-            page=page,
-            page_size=page_size,
-        )
+    count_statement = select(func.count()).select_from(User)
+    total = session.exec(count_statement).one()
 
-        users = [
-            UserPublic(
-                id=uuid.UUID(user["id"]),
-                email=user.get("email", ""),
-                full_name=user.get("user_metadata", {}).get("full_name"),
-                avatar_url=user.get("user_metadata", {}).get("avatar_url"),
-                is_superuser=user.get("app_metadata", {}).get("is_superuser", False),
-                is_verified=bool(user.get("email_confirmed_at")),
-                created_at=user.get("created_at"),
-                updated_at=user.get("updated_at"),
-            )
-            for user in result.get("users", [])
-        ]
+    offset = (page - 1) * page_size
+    statement = (
+        select(User)
+        .order_by(col(User.created_at).desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    users = session.exec(statement).all()
 
-        total_pages = (result.get("total", 0) + page_size - 1) // page_size
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
 
-        return PaginatedResponse(
-            data=users,
-            total=result.get("total", 0),
-            page=page,
-            page_size=page_size,
-            total_pages=total_pages,
-        )
-    except Exception as e:
-        parsed_error = parse_supabase_error(e)
-        raise HTTPException(
-            status_code=400,
-            detail=parsed_error.message,
-        )
+    return PaginatedResponse(
+        data=[UserPublic.model_validate(u) for u in users],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.post("/users", response_model=UserPublic)
-async def create_user(
+def create_user(
     superuser: SuperUserDep,
     session: SessionDep,
     user_in: AdminUserCreate,
 ) -> UserPublic:
-    """
-    Create a new user via admin API.
-
-    Requires superuser privileges.
-    """
-    try:
-        result = await admin_auth_service.create_user(
-            email=user_in.email,
-            password=user_in.password,
-            email_confirm=user_in.email_confirm,
-            full_name=user_in.full_name,
-        )
-
-        import uuid as uuid_module
-
-        from app.models import Profile
-
-        user_uuid = uuid_module.UUID(result.get("id", ""))
-        profile = Profile(
-            id=user_uuid,
-            email=user_in.email,
-            full_name=user_in.full_name,
-            is_verified=user_in.email_confirm,
-        )
-        session.add(profile)
-        session.commit()
-        session.refresh(profile)
-
-        return UserPublic(
-            id=profile.id,
-            email=profile.email,
-            full_name=profile.full_name,
-            avatar_url=profile.avatar_url,
-            is_superuser=profile.is_superuser,
-            is_verified=profile.is_verified,
-            created_at=profile.created_at,
-            updated_at=profile.updated_at,
-        )
-    except Exception as e:
-        parsed_error = parse_supabase_error(e)
+    existing_user = crud.get_user_by_email(session=session, email=user_in.email)
+    if existing_user:
         raise HTTPException(
             status_code=400,
-            detail=parsed_error.message,
+            detail="A user with this email already exists",
         )
+
+    user_create = UserCreate(
+        email=user_in.email,
+        password=user_in.password,
+        full_name=user_in.full_name,
+        is_superuser=user_in.is_superuser,
+    )
+    user = crud.create_user(session=session, user_create=user_create)
+
+    return UserPublic.model_validate(user)
 
 
 @router.get("/users/{user_id}", response_model=UserPublic)
-async def get_user(
+def get_user(
     superuser: SuperUserDep,
+    session: SessionDep,
     user_id: uuid.UUID,
 ) -> UserPublic:
-    """
-    Get user by ID.
-
-    Requires superuser privileges.
-    """
-    try:
-        result = await admin_auth_service.get_user_by_id(str(user_id))
-
-        if not result:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        return UserPublic(
-            id=uuid.UUID(result.get("id", "")),
-            email=result.get("email", ""),
-            full_name=result.get("user_metadata", {}).get("full_name"),
-            avatar_url=result.get("user_metadata", {}).get("avatar_url"),
-            is_superuser=result.get("app_metadata", {}).get("is_superuser", False),
-            is_verified=bool(result.get("email_confirmed_at")),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at"),
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        parsed_error = parse_supabase_error(e)
-        raise HTTPException(
-            status_code=400,
-            detail=parsed_error.message,
-        )
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return UserPublic.model_validate(user)
 
 
 @router.patch("/users/{user_id}", response_model=UserPublic)
-async def update_user(
+def update_user(
     superuser: SuperUserDep,
     session: SessionDep,
     user_id: uuid.UUID,
     user_in: AdminUserUpdate,
 ) -> UserPublic:
-    """
-    Update user by ID.
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    Requires superuser privileges.
-    """
-    try:
-        result = await admin_auth_service.update_user_by_id(
-            user_id=str(user_id),
-            email=user_in.email,
-            password=user_in.password,
-            full_name=user_in.full_name,
-            ban_duration=user_in.ban_duration,
-        )
+    if user_in.email and user_in.email != user.email:
+        existing_user = crud.get_user_by_email(session=session, email=user_in.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=400,
+                detail="A user with this email already exists",
+            )
+        user.email = user_in.email
+        user.is_verified = False
 
-        from app import crud
+    if user_in.password:
+        user.hashed_password = get_password_hash(user_in.password)
 
-        profile = crud.get_profile_by_id(session=session, user_id=user_id)
-        if profile:
-            if user_in.full_name is not None:
-                profile.full_name = user_in.full_name
-            if user_in.is_superuser is not None:
-                profile.is_superuser = user_in.is_superuser
-            from app.models import get_datetime_utc
+    if user_in.full_name is not None:
+        user.full_name = user_in.full_name
 
-            profile.updated_at = get_datetime_utc()
-            session.add(profile)
-            session.commit()
-            session.refresh(profile)
+    if user_in.is_superuser is not None:
+        user.is_superuser = user_in.is_superuser
 
-        return UserPublic(
-            id=uuid.UUID(result.get("id", "")),
-            email=result.get("email", ""),
-            full_name=result.get("user_metadata", {}).get("full_name"),
-            avatar_url=result.get("user_metadata", {}).get("avatar_url"),
-            is_superuser=result.get("app_metadata", {}).get("is_superuser", False),
-            is_verified=bool(result.get("email_confirmed_at")),
-            created_at=result.get("created_at"),
-            updated_at=result.get("updated_at"),
-        )
-    except Exception as e:
-        parsed_error = parse_supabase_error(e)
-        raise HTTPException(
-            status_code=400,
-            detail=parsed_error.message,
-        )
+    if user_in.is_active is not None:
+        user.is_active = user_in.is_active
+
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    return UserPublic.model_validate(user)
 
 
 @router.delete("/users/{user_id}", response_model=Message)
-async def delete_user(
+def delete_user(
     superuser: SuperUserDep,
     session: SessionDep,
     user_id: uuid.UUID,
 ) -> Message:
-    """
-    Delete user by ID.
-
-    Deletes from both Supabase Auth and local profile.
-    Requires superuser privileges.
-    """
-    try:
-        await admin_auth_service.delete_user(str(user_id))
-
-        from app import crud
-
-        profile = crud.get_profile_by_id(session=session, user_id=user_id)
-        if profile:
-            session.delete(profile)
-            session.commit()
-
-        return Message(message="User deleted successfully")
-    except Exception as e:
-        parsed_error = parse_supabase_error(e)
+    if user_id == superuser.id:
         raise HTTPException(
-            status_code=400,
-            detail=parsed_error.message,
+            status_code=403,
+            detail="Super users are not allowed to delete themselves",
         )
 
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-@router.get("/users/{user_id}/sessions", response_model=list[AuthSession])
-async def list_user_sessions(
-    superuser: SuperUserDep,
-    user_id: uuid.UUID,
-) -> list[AuthSession]:
-    """
-    List all active sessions for a user.
+    session.delete(user)
+    session.commit()
 
-    Requires superuser privileges.
-    """
-    raise HTTPException(
-        status_code=501,
-        detail="Session listing requires Supabase client implementation",
-    )
-
-
-@router.delete("/users/{user_id}/sessions/{session_id}", response_model=Message)
-async def revoke_user_session(
-    superuser: SuperUserDep,
-    user_id: uuid.UUID,
-    session_id: str,
-) -> Message:
-    """
-    Revoke a specific session for a user.
-
-    Requires superuser privileges.
-    """
-    raise HTTPException(
-        status_code=501,
-        detail="Session revocation requires Supabase client implementation",
-    )
+    return Message(message="User deleted successfully")

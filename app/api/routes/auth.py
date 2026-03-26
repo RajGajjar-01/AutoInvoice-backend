@@ -1,42 +1,35 @@
+from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Cookie, Header, HTTPException, Response
+import jwt
+from fastapi import APIRouter, Cookie, HTTPException, Response
+from jwt.exceptions import InvalidTokenError
 from sqlmodel import SQLModel
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep
+from app.core import security
 from app.core.config import settings
-from app.core.supabase_client import auth_service
-from app.exceptions import (
-    InvalidCredentialsError,
-    UserAlreadyExistsError,
-    parse_supabase_error,
-)
 from app.models import (
     Message,
+    NewPassword,
     Token,
-    UpdatePassword,
+    UserCreate,
     UserPublic,
-    UserRegister,
     UserUpdateMe,
-    get_datetime_utc,
 )
-
-ACCESS_TOKEN_MAX_AGE = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60  # 15 min
-REFRESH_TOKEN_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60  # 7 days
-COOKIE_SECURE = settings.ENVIRONMENT != "local"  # False for localhost
+from app.utils import (
+    generate_password_reset_token,
+    generate_reset_password_email,
+    send_email,
+    verify_password_reset_token,
+)
 
 router = APIRouter(tags=["auth"])
 
-
-class AuthResponse(Token):
-    refresh_token: str | None = None
-    expires_in: int | None = None
-    user: dict | None = None
-
-
-class EmailRequest(SQLModel):
-    email: str
+ACCESS_TOKEN_MAX_AGE = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+REFRESH_TOKEN_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+COOKIE_SECURE = settings.ENVIRONMENT != "local"
 
 
 class LoginRequest(SQLModel):
@@ -44,52 +37,27 @@ class LoginRequest(SQLModel):
     password: str
 
 
+class AuthResponse(Token):
+    user: UserPublic | None = None
+
+
 @router.post("/auth/signup", response_model=AuthResponse)
-async def signup(
+def signup(
     response: Response,
     session: SessionDep,
-    user_in: UserRegister,
+    user_in: UserCreate,
 ) -> AuthResponse:
-    """
-    Sign up a new user via Supabase Auth.
-
-    Creates user in Supabase and returns session tokens as HttpOnly cookies.
-    """
-    try:
-        result = await auth_service.sign_up(
-            email=user_in.email,
-            password=user_in.password,
-            full_name=user_in.full_name,
-        )
-    except Exception as e:
-        parsed_error = parse_supabase_error(e)
-        if isinstance(parsed_error, UserAlreadyExistsError):
-            raise HTTPException(status_code=400, detail="User already exists")
+    user = crud.get_user_by_email(session=session, email=user_in.email)
+    if user:
         raise HTTPException(
             status_code=400,
-            detail=parsed_error.message,
+            detail="A user with this email already exists",
         )
 
-    user_data = result.get("user")
-    if user_data and user_data.get("id"):
-        import uuid
+    user = crud.create_user(session=session, user_create=user_in)
 
-        from app.models import Profile
-
-        user_uuid = uuid.UUID(user_data["id"])
-        profile = crud.get_profile_by_id(session=session, user_id=user_uuid)
-        if not profile:
-            profile = Profile(
-                id=user_uuid,
-                email=user_data.get("email", user_in.email),
-                full_name=user_in.full_name,
-                is_verified=bool(user_data.get("email_confirmed_at")),
-            )
-            session.add(profile)
-            session.commit()
-
-    access_token = result.get("access_token", "")
-    refresh_token_value = result.get("refresh_token")
+    access_token = security.create_access_token(subject=user.id)
+    refresh_token = security.create_refresh_token(subject=user.id)
 
     response.set_cookie(
         key="access_token",
@@ -100,70 +68,36 @@ async def signup(
         max_age=ACCESS_TOKEN_MAX_AGE,
         path="/",
     )
-    if refresh_token_value:
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token_value,
-            httponly=True,
-            secure=COOKIE_SECURE,
-            samesite="lax",
-            max_age=REFRESH_TOKEN_MAX_AGE,
-            path="/",
-        )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_MAX_AGE,
+        path="/",
+    )
 
     return AuthResponse(
-        access_token="",
-        refresh_token=None,
-        expires_in=result.get("expires_in"),
-        user=user_data,
+        access_token=access_token,
+        token_type="bearer",
+        refresh_token=refresh_token,
+        user=UserPublic.model_validate(user),
     )
 
 
 @router.post("/auth/login", response_model=AuthResponse)
-async def login(
+def login(
     response: Response,
     session: SessionDep,
     body: LoginRequest,
 ) -> AuthResponse:
-    """
-    Login with email and password via Supabase Auth.
+    user = crud.authenticate(session=session, email=body.email, password=body.password)
+    if not user:
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
 
-    Returns access_token and refresh_token as HttpOnly cookies.
-    """
-    try:
-        result = await auth_service.sign_in_with_password(
-            email=body.email,
-            password=body.password,
-        )
-    except Exception as e:
-        parsed_error = parse_supabase_error(e)
-        if isinstance(parsed_error, InvalidCredentialsError):
-            raise HTTPException(status_code=400, detail="Incorrect email or password")
-        raise HTTPException(
-            status_code=400,
-            detail=parsed_error.message,
-        )
-
-    user_data = result.get("user")
-    if user_data and user_data.get("id"):
-        import uuid
-
-        from app.models import Profile
-
-        user_uuid = uuid.UUID(user_data["id"])
-        profile = crud.get_profile_by_id(session=session, user_id=user_uuid)
-        if not profile:
-            profile = Profile(
-                id=user_uuid,
-                email=user_data.get("email", body.email),
-                full_name=user_data.get("user_metadata", {}).get("full_name"),
-                is_verified=bool(user_data.get("email_confirmed_at")),
-            )
-            session.add(profile)
-            session.commit()
-
-    access_token = result.get("access_token", "")
-    refresh_token_value = result.get("refresh_token")
+    access_token = security.create_access_token(subject=user.id)
+    refresh_token = security.create_refresh_token(subject=user.id)
 
     response.set_cookie(
         key="access_token",
@@ -174,174 +108,83 @@ async def login(
         max_age=ACCESS_TOKEN_MAX_AGE,
         path="/",
     )
-    if refresh_token_value:
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token_value,
-            httponly=True,
-            secure=COOKIE_SECURE,
-            samesite="lax",
-            max_age=REFRESH_TOKEN_MAX_AGE,
-            path="/",
-        )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_MAX_AGE,
+        path="/",
+    )
 
     return AuthResponse(
-        access_token="",
-        refresh_token=None,
-        expires_in=result.get("expires_in"),
-        user=user_data,
+        access_token=access_token,
+        token_type="bearer",
+        refresh_token=refresh_token,
+        user=UserPublic.model_validate(user),
     )
 
 
-@router.post("/auth/refresh", response_model=AuthResponse)
-async def refresh_token(
+@router.post("/auth/refresh", response_model=Token)
+def refresh_token(
     response: Response,
     refresh_token: Annotated[str | None, Cookie()] = None,
-) -> AuthResponse:
-    """
-    Refresh access token using refresh token from cookie.
-    """
+) -> Token:
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token not found")
 
     try:
-        result = await auth_service.refresh_session(refresh_token=refresh_token)
-    except Exception:
+        payload = jwt.decode(
+            refresh_token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+        )
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=403, detail="Invalid token type")
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=403, detail="Invalid token")
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    access_token = result.get("access_token", "")
-    refresh_token_value = result.get("refresh_token")
+    new_access_token = security.create_access_token(subject=user_id)
+    new_refresh_token = security.create_refresh_token(subject=user_id)
 
     response.set_cookie(
         key="access_token",
-        value=access_token,
+        value=new_access_token,
         httponly=True,
         secure=COOKIE_SECURE,
         samesite="lax",
         max_age=ACCESS_TOKEN_MAX_AGE,
         path="/",
     )
-    if refresh_token_value:
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token_value,
-            httponly=True,
-            secure=COOKIE_SECURE,
-            samesite="lax",
-            max_age=REFRESH_TOKEN_MAX_AGE,
-            path="/",
-        )
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_MAX_AGE,
+        path="/",
+    )
 
-    return AuthResponse(
-        access_token="",
-        refresh_token=None,
-        expires_in=result.get("expires_in"),
+    return Token(
+        access_token=new_access_token,
+        token_type="bearer",
+        refresh_token=new_refresh_token,
     )
 
 
 @router.post("/auth/logout", response_model=Message)
-async def logout(
-    response: Response,
-    authorization: str | None = Header(None),
-) -> Message:
-    """
-    Logout - invalidates the Supabase session and clears cookies.
-    """
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]
-        try:
-            await auth_service.sign_out(access_token=token)
-        except Exception:
-            pass
-
+def logout(response: Response) -> Message:
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
-
     return Message(message="Logged out successfully")
 
 
 @router.get("/auth/me", response_model=UserPublic)
 def get_current_user_info(current_user: CurrentUser) -> Any:
-    """
-    Get current user info from JWT token.
-    """
-    return UserPublic(
-        id=current_user.id,
-        email=current_user.email,
-        full_name=current_user.full_name,
-        avatar_url=current_user.avatar_url,
-        is_superuser=current_user.is_superuser,
-        is_verified=current_user.is_verified,
-        created_at=current_user.created_at,
-        updated_at=current_user.updated_at,
-    )
-
-
-@router.post("/auth/forgot-password", response_model=Message)
-async def forgot_password(
-    body: EmailRequest,
-) -> Message:
-    """
-    Request password reset email via Supabase.
-    """
-    try:
-        await auth_service.reset_password_email(email=body.email)
-    except Exception:
-        pass
-
-    return Message(
-        message="If that email is registered, a password reset link has been sent"
-    )
-
-
-@router.post("/auth/update-password", response_model=Message)
-async def update_password(
-    current_user: CurrentUser,
-    session: SessionDep,
-    body: UpdatePassword,
-    access_token: Annotated[str | None, Cookie()] = None,
-) -> Message:
-    """
-    Update user password.
-
-    Uses access token from cookie.
-    """
-    if not access_token:
-        raise HTTPException(
-            status_code=401,
-            detail="Not authenticated",
-        )
-
-    try:
-        await auth_service.update_user(
-            access_token=access_token,
-            password=body.new_password,
-        )
-    except Exception as e:
-        parsed_error = parse_supabase_error(e)
-        raise HTTPException(
-            status_code=400,
-            detail=parsed_error.message,
-        )
-
-    return Message(message="Password updated successfully")
-
-
-@router.post("/auth/resend-verification", response_model=Message)
-async def resend_verification(
-    body: EmailRequest,
-) -> Message:
-    """
-    Resend email verification.
-    """
-    try:
-        await auth_service.resend_verification_email(email=body.email)
-    except Exception:
-        pass
-
-    return Message(
-        message="If that email is registered, a verification email has been sent"
-    )
+    return UserPublic.model_validate(current_user)
 
 
 @router.patch("/auth/me", response_model=UserPublic)
@@ -349,34 +192,94 @@ def update_current_user(
     session: SessionDep,
     current_user: CurrentUser,
     user_in: UserUpdateMe,
-    authorization: str | None = Header(None),
 ) -> Any:
-    """
-    Update current user information.
-
-    Updates both local profile and Supabase metadata.
-    """
     if user_in.full_name is not None:
         current_user.full_name = user_in.full_name
-        current_user.updated_at = get_datetime_utc()
-        session.add(current_user)
-        session.commit()
-        session.refresh(current_user)
-
     if user_in.email is not None and user_in.email != current_user.email:
-        if not authorization or not authorization.startswith("Bearer "):
+        existing_user = crud.get_user_by_email(session=session, email=user_in.email)
+        if existing_user:
             raise HTTPException(
-                status_code=401,
-                detail="Not authenticated",
+                status_code=400,
+                detail="A user with this email already exists",
             )
+        current_user.email = user_in.email
+        current_user.is_verified = False
 
-    return UserPublic(
-        id=current_user.id,
-        email=current_user.email,
-        full_name=current_user.full_name,
-        avatar_url=current_user.avatar_url,
-        is_superuser=current_user.is_superuser,
-        is_verified=current_user.is_verified,
-        created_at=current_user.created_at,
-        updated_at=current_user.updated_at,
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+
+    return UserPublic.model_validate(current_user)
+
+
+@router.post("/auth/forgot-password", response_model=Message)
+def forgot_password(
+    session: SessionDep,
+    email: str,
+) -> Message:
+    user = crud.get_user_by_email(session=session, email=email)
+    if user:
+        password_reset_token = generate_password_reset_token(email=email)
+        email_data = generate_reset_password_email(
+            email_to=user.email, email=email, token=password_reset_token
+        )
+        send_email(
+            email_to=user.email,
+            subject=email_data.subject,
+            html_content=email_data.html_content,
+        )
+
+    return Message(
+        message="If that email is registered, a password reset link has been sent"
     )
+
+
+@router.post("/auth/reset-password", response_model=Message)
+def reset_password(
+    session: SessionDep,
+    body: NewPassword,
+) -> Message:
+    email = verify_password_reset_token(token=body.token)
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid token")
+    user = crud.get_user_by_email(session=session, email=email)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid token")
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+
+    from app.models import UserUpdate
+
+    user_update = UserUpdate(password=body.new_password)
+    crud.update_user(session=session, db_user=user, user_in=user_update)
+
+    return Message(message="Password updated successfully")
+
+
+@router.post("/auth/update-password", response_model=Message)
+def update_password(
+    session: SessionDep,
+    current_user: CurrentUser,
+    body: dict[str, str],
+) -> Message:
+    current_password = body.get("current_password")
+    new_password = body.get("new_password")
+
+    if not current_password or not new_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Current password and new password are required",
+        )
+
+    user = crud.authenticate(
+        session=session, email=current_user.email, password=current_password
+    )
+    if not user:
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+
+    from app.models import UserUpdate
+
+    user_update = UserUpdate(password=new_password)
+    crud.update_user(session=session, db_user=user, user_in=user_update)
+
+    return Message(message="Password updated successfully")
