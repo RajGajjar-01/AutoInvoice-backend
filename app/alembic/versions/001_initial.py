@@ -61,7 +61,6 @@ def upgrade():
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("description", sa.String(500), nullable=True),
         sa.Column("columns", postgresql.JSONB, nullable=False, server_default="[]"),
-        sa.Column("settings", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["owner_id"], ["user.id"], ondelete="CASCADE"),
@@ -74,7 +73,6 @@ def upgrade():
         sa.Column("table_id", sa.UUID(as_uuid=False), nullable=False),
         sa.Column("data", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["table_id"], ["data_tables.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_table_rows_table_id", "table_rows", ["table_id"])
@@ -83,35 +81,34 @@ def upgrade():
         "table_reminders",
         sa.Column("id", sa.UUID(as_uuid=False), primary_key=True),
         sa.Column("table_id", sa.UUID(as_uuid=False), nullable=False),
-        sa.Column("row_id", sa.UUID(as_uuid=False), nullable=False),
-        sa.Column("owner_id", sa.UUID(as_uuid=False), nullable=False),
-        sa.Column("reminder_datetime", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("notified", sa.Boolean, nullable=False, server_default="false"),
+        sa.Column("reminder_data", postgresql.JSONB, nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["table_id"], ["data_tables.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["row_id"], ["table_rows.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["owner_id"], ["user.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_table_reminders_table_id", "table_reminders", ["table_id"])
-    op.create_index("ix_table_reminders_owner_id", "table_reminders", ["owner_id"])
 
     op.create_table(
         "customers",
         sa.Column("id", sa.UUID(as_uuid=False), primary_key=True),
         sa.Column("owner_id", sa.UUID(as_uuid=False), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("email", sa.String(255), nullable=True),
+        sa.Column(
+            "party_type", sa.String(20), nullable=True, server_default="customer"
+        ),
         sa.Column("phone", sa.String(50), nullable=True),
-        sa.Column("gstin", sa.String(50), nullable=True),
-        sa.Column("pan", sa.String(20), nullable=True),
-        sa.Column("address", sa.String(500), nullable=True),
-        sa.Column("city", sa.String(100), nullable=True),
-        sa.Column("state", sa.String(100), nullable=True),
-        sa.Column("pincode", sa.String(20), nullable=True),
-        sa.Column("country", sa.String(100), nullable=True),
-        sa.Column("notes", sa.String(1000), nullable=True),
+        sa.Column("whatsapp", sa.String(50), nullable=True),
+        sa.Column("email", sa.String(255), nullable=True),
         sa.Column("billing_address", sa.String(500), nullable=True),
         sa.Column("shipping_address", sa.String(500), nullable=True),
+        sa.Column("address", sa.String(500), nullable=True),
+        sa.Column("gstin", sa.String(50), nullable=True),
+        sa.Column("gst", sa.String(50), nullable=True),
+        sa.Column("state", sa.String(100), nullable=True),
+        sa.Column("tags", postgresql.JSONB, nullable=False, server_default="[]"),
+        sa.Column("opening_balance", sa.Float, nullable=False, server_default="0"),
+        sa.Column("credit_limit", sa.Float, nullable=True),
+        sa.Column("payment_terms", sa.String(500), nullable=True),
+        sa.Column("notes", sa.String(1000), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["owner_id"], ["user.id"], ondelete="CASCADE"),
@@ -122,28 +119,29 @@ def upgrade():
         "invoices",
         sa.Column("id", sa.UUID(as_uuid=False), primary_key=True),
         sa.Column("owner_id", sa.UUID(as_uuid=False), nullable=False),
-        sa.Column("customer_id", sa.UUID(as_uuid=False), nullable=True),
+        sa.Column("customer_id", sa.UUID(as_uuid=False), nullable=False),
         sa.Column("invoice_number", sa.String(50), nullable=False),
         sa.Column(
             "document_type", sa.String(20), nullable=False, server_default="invoice"
         ),
-        sa.Column("date", sa.Date, nullable=False),
+        sa.Column("invoice_date", sa.Date, nullable=False),
         sa.Column("due_date", sa.Date, nullable=True),
         sa.Column("valid_until", sa.Date, nullable=True),
+        sa.Column("currency", sa.String(10), nullable=False, server_default="INR"),
         sa.Column("items", postgresql.JSONB, nullable=False, server_default="[]"),
         sa.Column("subtotal", sa.Float, nullable=False, server_default="0"),
-        sa.Column("tax", sa.Float, nullable=False, server_default="0"),
+        sa.Column("total_tax", sa.Float, nullable=False, server_default="0"),
+        sa.Column("grand_total", sa.Float, nullable=False, server_default="0"),
         sa.Column("discount", sa.Float, nullable=False, server_default="0"),
-        sa.Column("total", sa.Float, nullable=False, server_default="0"),
         sa.Column("notes", sa.String(2000), nullable=True),
-        sa.Column("terms", sa.String(2000), nullable=True),
+        sa.Column("payment_terms", sa.String(500), nullable=True),
         sa.Column("status", sa.String(20), nullable=False, server_default="draft"),
         sa.Column("place_of_supply", sa.String(100), nullable=True),
         sa.Column("reverse_charge", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["owner_id"], ["user.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["customer_id"], ["customers.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["customer_id"], ["customers.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_invoices_owner_id", "invoices", ["owner_id"])
     op.create_index("ix_invoices_customer_id", "invoices", ["customer_id"])
@@ -264,7 +262,6 @@ def downgrade():
     op.drop_index("ix_customers_owner_id", "customers")
     op.drop_table("customers")
 
-    op.drop_index("ix_table_reminders_owner_id", "table_reminders")
     op.drop_index("ix_table_reminders_table_id", "table_reminders")
     op.drop_table("table_reminders")
 
