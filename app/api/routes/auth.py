@@ -30,6 +30,7 @@ router = APIRouter(tags=["auth"])
 ACCESS_TOKEN_MAX_AGE = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 REFRESH_TOKEN_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 COOKIE_SECURE = settings.ENVIRONMENT != "local"
+COOKIE_SAMESITE = "none" if settings.ENVIRONMENT != "local" else "lax"
 
 
 class LoginRequest(SQLModel):
@@ -64,7 +65,7 @@ def signup(
         value=access_token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=ACCESS_TOKEN_MAX_AGE,
         path="/",
     )
@@ -73,7 +74,7 @@ def signup(
         value=refresh_token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=REFRESH_TOKEN_MAX_AGE,
         path="/",
     )
@@ -104,7 +105,7 @@ def login(
         value=access_token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=ACCESS_TOKEN_MAX_AGE,
         path="/",
     )
@@ -113,7 +114,7 @@ def login(
         value=refresh_token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=REFRESH_TOKEN_MAX_AGE,
         path="/",
     )
@@ -154,7 +155,7 @@ def refresh_token(
         value=new_access_token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=ACCESS_TOKEN_MAX_AGE,
         path="/",
     )
@@ -163,7 +164,7 @@ def refresh_token(
         value=new_refresh_token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=REFRESH_TOKEN_MAX_AGE,
         path="/",
     )
