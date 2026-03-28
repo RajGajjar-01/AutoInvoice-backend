@@ -6,3 +6,9 @@ app.egg-info
 .coverage
 htmlcov
 .venv
+
+# Environment files - NEVER copy secrets into image!
+.env
+.env.local
+.env.*.local
+*.local
