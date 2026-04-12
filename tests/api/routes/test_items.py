@@ -3,14 +3,23 @@ import uuid
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
+from app import crud
 from app.core.config import settings
+from app.models import User
 from tests.utils.item import create_random_item
+
+
+def get_superuser(db: Session) -> User:
+    user = crud.get_user_by_email(session=db, email=settings.FIRST_SUPERUSER)
+    assert user is not None
+    assert user.id is not None
+    return user
 
 
 def test_create_item(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:
-    data = {"title": "Foo", "description": "Fighters"}
+    data = {"name": "Foo", "description": "Fighters"}
     response = client.post(
         f"{settings.API_V1_STR}/items/",
         headers=superuser_token_headers,
@@ -18,7 +27,7 @@ def test_create_item(
     )
     assert response.status_code == 200
     content = response.json()
-    assert content["title"] == data["title"]
+    assert content["name"] == data["name"]
     assert content["description"] == data["description"]
     assert "id" in content
     assert "owner_id" in content
@@ -27,14 +36,15 @@ def test_create_item(
 def test_read_item(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    item = create_random_item(db)
+    superuser = get_superuser(db)
+    item = create_random_item(db, owner_id=superuser.id)
     response = client.get(
         f"{settings.API_V1_STR}/items/{item.id}",
         headers=superuser_token_headers,
     )
     assert response.status_code == 200
     content = response.json()
-    assert content["title"] == item.title
+    assert content["name"] == item.name
     assert content["description"] == item.description
     assert content["id"] == str(item.id)
     assert content["owner_id"] == str(item.owner_id)
@@ -68,8 +78,9 @@ def test_read_item_not_enough_permissions(
 def test_read_items(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    create_random_item(db)
-    create_random_item(db)
+    superuser = get_superuser(db)
+    create_random_item(db, owner_id=superuser.id)
+    create_random_item(db, owner_id=superuser.id)
     response = client.get(
         f"{settings.API_V1_STR}/items/",
         headers=superuser_token_headers,
@@ -82,8 +93,9 @@ def test_read_items(
 def test_update_item(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    item = create_random_item(db)
-    data = {"title": "Updated title", "description": "Updated description"}
+    superuser = get_superuser(db)
+    item = create_random_item(db, owner_id=superuser.id)
+    data = {"name": "Updated name", "description": "Updated description"}
     response = client.put(
         f"{settings.API_V1_STR}/items/{item.id}",
         headers=superuser_token_headers,
@@ -91,7 +103,7 @@ def test_update_item(
     )
     assert response.status_code == 200
     content = response.json()
-    assert content["title"] == data["title"]
+    assert content["name"] == data["name"]
     assert content["description"] == data["description"]
     assert content["id"] == str(item.id)
     assert content["owner_id"] == str(item.owner_id)
@@ -100,7 +112,7 @@ def test_update_item(
 def test_update_item_not_found(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:
-    data = {"title": "Updated title", "description": "Updated description"}
+    data = {"name": "Updated name", "description": "Updated description"}
     response = client.put(
         f"{settings.API_V1_STR}/items/{uuid.uuid4()}",
         headers=superuser_token_headers,
@@ -114,8 +126,9 @@ def test_update_item_not_found(
 def test_update_item_not_enough_permissions(
     client: TestClient, normal_user_token_headers: dict[str, str], db: Session
 ) -> None:
-    item = create_random_item(db)
-    data = {"title": "Updated title", "description": "Updated description"}
+    superuser = get_superuser(db)
+    item = create_random_item(db, owner_id=superuser.id)
+    data = {"name": "Updated name", "description": "Updated description"}
     response = client.put(
         f"{settings.API_V1_STR}/items/{item.id}",
         headers=normal_user_token_headers,
@@ -129,7 +142,8 @@ def test_update_item_not_enough_permissions(
 def test_delete_item(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    item = create_random_item(db)
+    superuser = get_superuser(db)
+    item = create_random_item(db, owner_id=superuser.id)
     response = client.delete(
         f"{settings.API_V1_STR}/items/{item.id}",
         headers=superuser_token_headers,
