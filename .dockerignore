@@ -1,14 +1,21 @@
-# Python
-__pycache__
-app.egg-info
-*.pyc
-.mypy_cache
-.coverage
-htmlcov
+.git
+.gitignore
 .venv
-
-# Environment files - NEVER copy secrets into image!
 .env
 .env.local
 .env.*.local
 *.local
+__pycache__
+*.pyc
+*.pyo
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.coverage
+htmlcov
+app.egg-info
+Dockerfile
+docker-compose.yml
+README.md
+.vscode
+.idea

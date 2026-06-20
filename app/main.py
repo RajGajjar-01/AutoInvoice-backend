@@ -62,6 +62,7 @@ if settings.all_cors_origins:
             "Content-Type",
             "Authorization",
         ],
+        max_age=86400,
     )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
