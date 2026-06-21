@@ -56,6 +56,7 @@ class Settings(BaseSettings):
         ]
 
     PROJECT_NAME: str = "AutoInvoice"
+    SENTRY_DSN: str | None = None
 
     # Support Railway's DATABASE_URL directly
     DATABASE_URL: str | None = None

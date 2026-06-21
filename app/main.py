@@ -1,5 +1,6 @@
 import logging
 
+import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
@@ -10,6 +11,15 @@ from app.core.config import settings
 from app.exceptions import AuthError
 
 logger = logging.getLogger(__name__)
+
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        send_default_pii=True,
+        traces_sample_rate=1.0 if settings.ENVIRONMENT != "production" else 0.2,
+    )
+    logger.info("Sentry initialized for environment: %s", settings.ENVIRONMENT)
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -72,3 +82,11 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 async def health() -> dict:
     """Health check endpoint for Railway and Docker."""
     return {"status": "healthy"}
+
+
+# ⚠️  TEMPORARY — remove after verifying Sentry is working
+@app.get("/sentry-debug")
+async def sentry_debug() -> dict:
+    """Intentionally triggers an error to verify Sentry is capturing events."""
+    _ = 1 / 0
+    return {"status": "unreachable"}
