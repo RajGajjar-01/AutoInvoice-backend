@@ -1,4 +1,4 @@
-# Backend layered restructure: models / schemas / repositories / services
+go # Backend layered restructure: models / schemas / repositories / services
 
 ## Problem
 
@@ -18,7 +18,8 @@ A sibling project, `backend-2`, already uses a layered structure
 pattern, though it has no `services/` layer (it mostly proxies to Supabase
 over raw SQL via asyncpg). This restructure adopts backend-2's folder
 layout and repository pattern, adapted to this project's SQLAlchemy/SQLModel
-+ sync `Session` stack, and adds the `services/` layer backend-2 doesn't
+stack (request path on `AsyncSession`, see "Async I/O" below), and adds
+the `services/` layer backend-2 doesn't
 need but this project does.
 
 ## Goals
@@ -39,7 +40,10 @@ need but this project does.
 - No change to the API response envelope (no `{data, meta}` wrapper from
   backend-2 — explicitly rejected to avoid a frontend contract change).
 - No change to authentication mechanism (JWT + cookies stay as-is).
-- No async rewrite — stays on sync SQLAlchemy `Session`.
+- No async rewrite of Alembic, bootstrap scripts, or test fixtures — see
+  "Async I/O" below for what does and doesn't go async, and why.
+- No new database driver dependency — psycopg3 (already installed)
+  handles both sync and async; asyncpg was considered and rejected.
 - No full test-coverage push — only a minimal CRUD smoke test per
   currently-untested domain, not exhaustive coverage.
 
@@ -94,16 +98,16 @@ result *means* (no `HTTPException`, no business rules).
 
 ```python
 class BaseRepository(Generic[ModelType]):
-    def __init__(self, session: Session) -> None: self.session = session
-    def get(self, id: uuid.UUID) -> ModelType | None: ...
-    def add(self, obj: ModelType) -> ModelType: ...
-    def delete(self, obj: ModelType) -> None: ...
+    def __init__(self, session: AsyncSession) -> None: self.session = session
+    async def get(self, id: uuid.UUID) -> ModelType | None: ...
+    async def add(self, obj: ModelType) -> ModelType: ...
+    async def delete(self, obj: ModelType) -> None: ...
 
 class TableRepository(BaseRepository[DataTable]):
-    def list_by_owner(self, owner_id, *, search, sort_by, sort_order, skip, limit) -> tuple[list[DataTable], int]: ...
-    def get_by_id_and_owner(self, table_id, owner_id) -> DataTable | None: ...
-    def add_row(self, table_id, data) -> TableRow: ...
-    def bulk_delete_rows(self, table_id, row_ids) -> int: ...
+    async def list_by_owner(self, owner_id, *, search, sort_by, sort_order, skip, limit) -> tuple[list[DataTable], int]: ...
+    async def get_by_id_and_owner(self, table_id, owner_id) -> DataTable | None: ...
+    async def add_row(self, table_id, data) -> TableRow: ...
+    async def bulk_delete_rows(self, table_id, row_ids) -> int: ...
 ```
 
 **services/** — own business rules and orchestration. Raise domain
@@ -118,18 +122,18 @@ orchestration, password reset/change flows, etc.
 class TableService:
     def __init__(self, repo: TableRepository): self.repo = repo
 
-    def get_table(self, table_id, owner_id) -> DataTable:
-        table = self.repo.get_by_id_and_owner(table_id, owner_id)
+    async def get_table(self, table_id, owner_id) -> DataTable:
+        table = await self.repo.get_by_id_and_owner(table_id, owner_id)
         if not table:
             raise NotFoundError("Table not found")
         return table
 
-    def add_row(self, table_id, owner_id, row_in: TableRowCreate) -> TableRow:
-        table = self.get_table(table_id, owner_id)
+    async def add_row(self, table_id, owner_id, row_in: TableRowCreate) -> TableRow:
+        table = await self.get_table(table_id, owner_id)
         ok, missing = _validate_row_data(table.columns, row_in.data)
         if not ok:
             raise ValidationError(f"Missing mandatory fields: {', '.join(missing)}")
-        return self.repo.add_row(table_id, row_in.data)
+        return await self.repo.add_row(table_id, row_in.data)
 ```
 
 **api/routes/*.py** — single service call per endpoint, no inline 404/403,
@@ -137,11 +141,13 @@ no inline validation:
 
 ```python
 @router.post("/{table_id}/rows", response_model=TableRowPublic, status_code=201)
-def create_table_row(current_user: CurrentUser, table_id: uuid.UUID, row_create: TableRowCreate, service: TableServiceDep) -> Any:
-    return service.add_row(table_id, current_user.id, row_create)
+async def create_table_row(current_user: CurrentUser, table_id: uuid.UUID, row_create: TableRowCreate, service: TableServiceDep) -> Any:
+    return await service.add_row(table_id, current_user.id, row_create)
 ```
 
-**api/deps.py** — one provider pair per domain, same shape every time:
+**api/deps.py** — one provider pair per domain, same shape every time
+(constructing a repository/service object isn't itself async — only the
+methods that touch the DB are):
 
 ```python
 def get_table_repository(session: SessionDep) -> TableRepository: return TableRepository(session)
@@ -206,4 +212,53 @@ tests (customers, notifications, company_settings, invoice_templates,
 invoices, admin) get a minimal CRUD smoke test added as part of their
 migration step — not exhaustive coverage, just enough to catch a broken
 endpoint. After each domain step: `pytest`, `mypy --strict`,
+`ruff check`.
+
+## Async I/O
+
+**Decision:** the request-serving path (routes → services → repositories)
+runs on `AsyncSession`/`async def` throughout, on top of **psycopg3** —
+not asyncpg. psycopg3 is already a dependency
+(`psycopg[binary]>=3.2.0,<4.0.0`) and natively supports both sync and
+async connections from the same package: SQLAlchemy picks sync vs async
+based on `create_engine` vs `create_async_engine`, both against the same
+`postgresql+psycopg://` URL scheme. This gets the real scalability benefit
+(async I/O doesn't block a thread-pool slot per in-flight DB call, unlike
+sync `Session` under FastAPI's default thread-pool execution) without a
+second driver dependency. asyncpg was considered and rejected: it would
+have meant two driver packages (one sync-only for Alembic/bootstrap/tests,
+one async-only for the app) for a performance margin that doesn't matter
+at this app's scale (CRUD/web-app query patterns, not high-frequency
+bulk operations) — psycopg3 async gets ~95% of the benefit with zero
+dependency duplication.
+
+**Scope:** only the request path goes async. Alembic migrations,
+`init_db`/bootstrap, and test fixtures (`tests/conftest.py`'s `db`
+fixture, `tests/utils/*.py`) keep using the existing sync `engine`/
+`Session` — these never run concurrently, so there's no scalability
+upside to converting them, and Alembic's migration runner has no async
+mode regardless. `TestClient` (httpx-based) calls into the now-async app
+exactly as it does today; no test code needs `async def` or
+`pytest-asyncio`, since `TestClient` drives the ASGI event loop
+internally regardless of whether routes are sync or async.
+
+**Mechanics:**
+- `app/core/config.py` gains `ASYNC_SQLALCHEMY_DATABASE_URI`, the same
+  URL as `SQLALCHEMY_DATABASE_URI` (reusing the same `POSTGRES_*`/
+  `DATABASE_URL` settings, no new env vars).
+- `app/core/db.py` gains `async_engine = create_async_engine(...)`
+  alongside the existing sync `engine`.
+- `app/api/deps.py`'s `get_db`/`SessionDep` move to
+  `sqlmodel.ext.asyncio.session.AsyncSession`; `get_current_user` and
+  every `get_X_repository`/`get_X_service` provider that touches the DB
+  becomes `async def`.
+- `BaseRepository` and every domain repository's methods become
+  `async def`, using `await self.session.exec(...)`, `.commit()`,
+  `.refresh()`, `.get()`, `.delete()` — the query-building code itself
+  (the `select(...)` statements) is unchanged, since SQLModel's
+  `AsyncSession` mirrors the sync `.exec()` API.
+- Every service method becomes `async def`, `await`-ing repository
+  calls. Validation/exception-raising logic is unchanged.
+- Every route becomes `async def`, `await`-ing the service call.
+  `response_model`, status codes, and path/query params are unchanged.
 `ruff check`.
