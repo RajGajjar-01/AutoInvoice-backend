@@ -8,14 +8,8 @@ from sqlmodel import SQLModel
 from app import crud
 from app.api.deps import SessionDep, SuperUserDep
 from app.core.security import get_password_hash
-from app.models import (
-    Message,
-    PaginatedResponse,
-    User,
-    UserCreate,
-    UserPublic,
-    UserUpdate,
-)
+from app.models import User
+from app.schemas import Message, PaginatedResponse, UserCreate, UserPublic, UserUpdate
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

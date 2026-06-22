@@ -5,15 +5,15 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.models import (
-    InvoiceTemplate,
+from app.core.time import get_datetime_utc
+from app.models import InvoiceTemplate
+from app.schemas import (
     InvoiceTemplateCreate,
     InvoiceTemplateKind,
     InvoiceTemplatePublic,
     InvoiceTemplatesPublic,
     InvoiceTemplateUpdate,
     Message,
-    get_datetime_utc,
 )
 from app.utils import parse_excel_file
 

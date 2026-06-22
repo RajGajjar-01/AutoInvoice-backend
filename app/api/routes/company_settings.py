@@ -5,13 +5,13 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.models import (
-    CompanySettings,
+from app.core.time import get_datetime_utc
+from app.models import CompanySettings
+from app.schemas import (
     CompanySettingsCreate,
     CompanySettingsPublic,
     CompanySettingsUpdate,
     Message,
-    get_datetime_utc,
 )
 
 router = APIRouter(prefix="/company-settings", tags=["company-settings"])

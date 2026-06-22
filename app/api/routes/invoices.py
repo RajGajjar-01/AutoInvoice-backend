@@ -5,11 +5,11 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.models import (
-    Customer,
+from app.core.time import get_datetime_utc
+from app.models import Customer, Invoice
+from app.schemas import (
     DashboardStats,
     DocumentType,
-    Invoice,
     InvoiceCreate,
     InvoicePublic,
     InvoicesPublic,
@@ -17,7 +17,6 @@ from app.models import (
     InvoiceUpdate,
     InvoiceWithCustomer,
     Message,
-    get_datetime_utc,
 )
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])

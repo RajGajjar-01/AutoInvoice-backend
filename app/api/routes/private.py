@@ -5,11 +5,8 @@ from pydantic import BaseModel, EmailStr
 
 from app import crud
 from app.api.deps import SessionDep
-from app.models import (
-    User,
-    UserCreate,
-    UserPublic,
-)
+from app.models import User
+from app.schemas import UserCreate, UserPublic
 
 router = APIRouter(tags=["private"], prefix="/private")
 

@@ -10,7 +10,7 @@ from app import crud
 from app.api.deps import CurrentUser, SessionDep
 from app.core import security
 from app.core.config import settings
-from app.models import (
+from app.schemas import (
     Message,
     NewPassword,
     Token,
@@ -249,7 +249,7 @@ def reset_password(
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
 
-    from app.models import UserUpdate
+    from app.schemas import UserUpdate
 
     user_update = UserUpdate(password=body.new_password)
     crud.update_user(session=session, db_user=user, user_in=user_update)
@@ -278,7 +278,7 @@ def update_password(
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect current password")
 
-    from app.models import UserUpdate
+    from app.schemas import UserUpdate
 
     user_update = UserUpdate(password=new_password)
     crud.update_user(session=session, db_user=user, user_in=user_update)

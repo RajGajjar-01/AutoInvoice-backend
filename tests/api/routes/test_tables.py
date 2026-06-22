@@ -514,8 +514,8 @@ def test_ownership_isolation(
     normal_user = create_random_user(db)
     
     # Update user password to known value
-    from app.models import UserUpdate
     from app import crud
+    from app.schemas import UserUpdate
     user_update = UserUpdate(password=password)
     crud.update_user(session=db, db_user=normal_user, user_in=user_update)
     

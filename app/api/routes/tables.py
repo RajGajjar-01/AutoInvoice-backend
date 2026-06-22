@@ -19,17 +19,15 @@ from app.crud import (
     update_row,
     validate_row_data,
 )
-from app.models import (
-    DataTable,
+from app.models import DataTable, TableReminder, TableRow
+from app.schemas import (
     DataTableCreate,
     DataTablePublic,
     DataTableUpdate,
     DataTableWithRows,
     PaginatedResponse,
-    TableReminder,
     TableReminderCreate,
     TableReminderPublic,
-    TableRow,
     TableRowCreate,
     TableRowPublic,
     TableRowUpdate,

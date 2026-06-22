@@ -6,14 +6,8 @@ from sqlmodel import col, func, select
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep, SuperUserDep
-from app.models import (
-    Message,
-    User,
-    UserPublic,
-    UserUpdate,
-    UserUpdateMe,
-    UsersPublic,
-)
+from app.models import User
+from app.schemas import Message, UserPublic, UserUpdate, UserUpdateMe, UsersPublic
 
 router = APIRouter(prefix="/users", tags=["users"])
 

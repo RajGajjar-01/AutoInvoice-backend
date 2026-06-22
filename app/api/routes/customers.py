@@ -5,8 +5,8 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.models import (
-    Customer,
+from app.models import Customer
+from app.schemas import (
     CustomerCreate,
     CustomerPublic,
     CustomersPublic,
@@ -81,7 +81,7 @@ def update_customer(
     if customer.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     update_dict = customer_in.model_dump(exclude_unset=True)
-    from app.models import get_datetime_utc
+    from app.core.time import get_datetime_utc
     update_dict["updated_at"] = get_datetime_utc()
     customer.sqlmodel_update(update_dict)
     session.add(customer)
