@@ -120,7 +120,7 @@ def create_table(
     column_names = [col.name for col in table_create.columns]
     if len(column_names) != len(set(column_names)):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Column names must be unique"
         )
 
@@ -200,7 +200,7 @@ def create_table_row(
     is_valid, missing = validate_row_data(table.columns, row_create.data)
     if not is_valid:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Missing mandatory fields: {', '.join(missing)}",
         )
 
@@ -233,7 +233,7 @@ def update_table_row(
     is_valid, missing = validate_row_data(table.columns, row_update.data)
     if not is_valid:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Missing mandatory fields: {', '.join(missing)}"
         )
 
