@@ -1,4 +1,3 @@
-import uuid
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
@@ -76,7 +75,7 @@ def test_list_tables(
             headers=superuser_token_headers,
             json=data,
         )
-    
+
     # List tables
     response = client.get(
         f"{settings.API_V1_STR}/tables",
@@ -115,7 +114,7 @@ def test_list_tables_with_search(
         headers=superuser_token_headers,
         json=data2,
     )
-    
+
     # Search for "Invoice"
     response = client.get(
         f"{settings.API_V1_STR}/tables?search=Invoice",
@@ -142,7 +141,7 @@ def test_get_table(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Get table
     response = client.get(
         f"{settings.API_V1_STR}/tables/{table_id}",
@@ -170,7 +169,7 @@ def test_update_table(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Update table
     update_data = {"name": "Updated Name"}
     response = client.patch(
@@ -198,14 +197,14 @@ def test_delete_table(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Delete table
     response = client.delete(
         f"{settings.API_V1_STR}/tables/{table_id}",
         headers=superuser_token_headers,
     )
     assert response.status_code == 204
-    
+
     # Verify table is deleted
     get_response = client.get(
         f"{settings.API_V1_STR}/tables/{table_id}",
@@ -229,7 +228,7 @@ def test_duplicate_table(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Add a row
     row_data = {"data": {"Name": "John Doe"}}
     client.post(
@@ -237,7 +236,7 @@ def test_duplicate_table(
         headers=superuser_token_headers,
         json=row_data,
     )
-    
+
     # Duplicate table
     response = client.post(
         f"{settings.API_V1_STR}/tables/{table_id}/duplicate",
@@ -247,7 +246,7 @@ def test_duplicate_table(
     content = response.json()
     assert content["name"] == "Original Table (Copy)"
     assert content["id"] != table_id
-    
+
     # Verify rows were copied
     get_response = client.get(
         f"{settings.API_V1_STR}/tables/{content['id']}",
@@ -274,7 +273,7 @@ def test_create_row(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Create row
     row_data = {"data": {"Name": "John Doe", "Age": "30"}}
     response = client.post(
@@ -303,7 +302,7 @@ def test_create_row_missing_mandatory_field(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Try to create row without mandatory field
     row_data = {"data": {}}
     response = client.post(
@@ -330,7 +329,7 @@ def test_update_row(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     row_data = {"data": {"Name": "John Doe"}}
     row_response = client.post(
         f"{settings.API_V1_STR}/tables/{table_id}/rows",
@@ -338,7 +337,7 @@ def test_update_row(
         json=row_data,
     )
     row_id = row_response.json()["id"]
-    
+
     # Update row
     update_data = {"data": {"Name": "Jane Doe"}}
     response = client.put(
@@ -366,7 +365,7 @@ def test_delete_row(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     row_data = {"data": {"Name": "John Doe"}}
     row_response = client.post(
         f"{settings.API_V1_STR}/tables/{table_id}/rows",
@@ -374,7 +373,7 @@ def test_delete_row(
         json=row_data,
     )
     row_id = row_response.json()["id"]
-    
+
     # Delete row
     response = client.delete(
         f"{settings.API_V1_STR}/tables/{table_id}/rows/{row_id}",
@@ -398,7 +397,7 @@ def test_bulk_delete_rows(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Create multiple rows
     row_ids = []
     for i in range(3):
@@ -409,7 +408,7 @@ def test_bulk_delete_rows(
             json=row_data,
         )
         row_ids.append(row_response.json()["id"])
-    
+
     # Bulk delete
     response = client.post(
         f"{settings.API_V1_STR}/tables/{table_id}/rows/bulk-delete",
@@ -436,7 +435,7 @@ def test_create_reminder(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Create reminder
     reminder_data = {
         "reminder_data": {
@@ -471,7 +470,7 @@ def test_delete_reminder(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     reminder_data = {
         "reminder_data": {"type": "date", "date": "2024-12-31"}
     }
@@ -481,7 +480,7 @@ def test_delete_reminder(
         json=reminder_data,
     )
     reminder_id = reminder_response.json()["id"]
-    
+
     # Delete reminder
     response = client.delete(
         f"{settings.API_V1_STR}/tables/{table_id}/reminders/{reminder_id}",
@@ -505,24 +504,24 @@ def test_ownership_isolation(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Create a normal user and get auth headers
     from tests.utils.user import create_random_user, user_authentication_headers
     from tests.utils.utils import random_lower_string
-    
+
     password = random_lower_string()
     normal_user = create_random_user(db)
-    
+
     # Update user password to known value
-    from app import crud
-    from app.schemas import UserUpdate
-    user_update = UserUpdate(password=password)
-    crud.update_user(session=db, db_user=normal_user, user_in=user_update)
-    
+    from app.core.security import get_password_hash
+    normal_user.hashed_password = get_password_hash(password)
+    db.add(normal_user)
+    db.commit()
+
     normal_user_headers = user_authentication_headers(
         client=client, email=normal_user.email, password=password
     )
-    
+
     # Try to access superuser's table as normal user
     response = client.get(
         f"{settings.API_V1_STR}/tables/{table_id}",
@@ -546,7 +545,7 @@ def test_cascade_delete(
         json=data,
     )
     table_id = create_response.json()["id"]
-    
+
     # Add row
     row_data = {"data": {"Name": "John Doe"}}
     row_response = client.post(
@@ -555,7 +554,7 @@ def test_cascade_delete(
         json=row_data,
     )
     row_id = row_response.json()["id"]
-    
+
     # Add reminder
     reminder_data = {"reminder_data": {"type": "date", "date": "2024-12-31"}}
     reminder_response = client.post(
@@ -564,14 +563,14 @@ def test_cascade_delete(
         json=reminder_data,
     )
     reminder_id = reminder_response.json()["id"]
-    
+
     # Delete table
     delete_response = client.delete(
         f"{settings.API_V1_STR}/tables/{table_id}",
         headers=superuser_token_headers,
     )
     assert delete_response.status_code == 204
-    
+
     # Verify table is gone
     get_response = client.get(
         f"{settings.API_V1_STR}/tables/{table_id}",

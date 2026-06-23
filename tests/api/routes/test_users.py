@@ -1,16 +1,28 @@
 import uuid
-from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from app import crud
 from app.core.config import settings
-from app.core.security import verify_password
+from app.core.security import get_password_hash
 from app.models import User
 from app.schemas import UserCreate
 from tests.utils.user import create_random_user
 from tests.utils.utils import random_email, random_lower_string
+
+
+def _create_user(db, user_in: UserCreate) -> User:
+    db_obj = User.model_validate(
+        user_in, update={"hashed_password": get_password_hash(user_in.password)}
+    )
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
+
+
+def _get_user_by_email(db, email: str) -> User | None:
+    return db.exec(select(User).where(User.email == email)).first()
 
 
 def test_get_users_superuser_me(
@@ -41,7 +53,7 @@ def test_get_existing_user_as_superuser(
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
-    user = crud.create_user(session=db, user_create=user_in)
+    user = _create_user(db, user_in)
     user_id = user.id
     r = client.get(
         f"{settings.API_V1_STR}/users/{user_id}",
@@ -49,7 +61,7 @@ def test_get_existing_user_as_superuser(
     )
     assert 200 <= r.status_code < 300
     api_user = r.json()
-    existing_user = crud.get_user_by_email(session=db, email=username)
+    existing_user = _get_user_by_email(db, username)
     assert existing_user
     assert existing_user.email == api_user["email"]
 
@@ -86,12 +98,12 @@ def test_retrieve_users(
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
-    crud.create_user(session=db, user_create=user_in)
+    _create_user(db, user_in)
 
     username2 = random_email()
     password2 = random_lower_string()
     user_in2 = UserCreate(email=username2, password=password2)
-    crud.create_user(session=db, user_create=user_in2)
+    _create_user(db, user_in2)
 
     r = client.get(f"{settings.API_V1_STR}/users/", headers=superuser_token_headers)
     all_users = r.json()
@@ -131,7 +143,7 @@ def test_update_user_me_email_exists(
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
-    user = crud.create_user(session=db, user_create=user_in)
+    user = _create_user(db, user_in)
 
     data = {"email": user.email}
     r = client.patch(
@@ -147,7 +159,7 @@ def test_delete_user_me(client: TestClient, db: Session) -> None:
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
-    user = crud.create_user(session=db, user_create=user_in)
+    user = _create_user(db, user_in)
     user_id = user.id
 
     r = client.post(
@@ -188,7 +200,7 @@ def test_delete_user_super_user(
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
-    user = crud.create_user(session=db, user_create=user_in)
+    user = _create_user(db, user_in)
     user_id = user.id
     r = client.delete(
         f"{settings.API_V1_STR}/users/{user_id}",
@@ -215,7 +227,7 @@ def test_delete_user_not_found(
 def test_delete_user_current_super_user_error(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    super_user = crud.get_user_by_email(session=db, email=settings.FIRST_SUPERUSER)
+    super_user = db.exec(select(User).where(User.email == settings.FIRST_SUPERUSER)).first()
     assert super_user
     user_id = super_user.id
 
@@ -233,7 +245,7 @@ def test_delete_user_without_privileges(
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
-    user = crud.create_user(session=db, user_create=user_in)
+    user = _create_user(db, user_in)
 
     r = client.delete(
         f"{settings.API_V1_STR}/users/{user.id}",

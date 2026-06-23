@@ -1,4 +1,3 @@
-import os
 import secrets
 import warnings
 from typing import Annotated, Any, Literal
@@ -66,6 +65,11 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = ""
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = ""
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ASYNC_SQLALCHEMY_DATABASE_URI(self) -> str:
+        return self.SQLALCHEMY_DATABASE_URI
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -8,7 +8,13 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
-from app.exceptions import AuthError
+from app.exceptions import (
+    AuthError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +68,26 @@ async def auth_exception_handler(request: Request, exc: AuthError) -> JSONRespon
     )
 
 
+@app.exception_handler(NotFoundError)
+async def not_found_exception_handler(request: Request, exc: NotFoundError) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": exc.message})
+
+
+@app.exception_handler(ForbiddenError)
+async def forbidden_exception_handler(request: Request, exc: ForbiddenError) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": exc.message})
+
+
+@app.exception_handler(ConflictError)
+async def conflict_exception_handler(request: Request, exc: ConflictError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": exc.message})
+
+
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": exc.message})
+
+
 if settings.all_cors_origins:
     app.add_middleware(
         CORSMiddleware,
@@ -79,14 +105,14 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health")
-async def health() -> dict:
+async def health() -> dict[str, str]:
     """Health check endpoint for Railway and Docker."""
     return {"status": "healthy"}
 
 
 # ⚠️  TEMPORARY — remove after verifying Sentry is working
 @app.get("/sentry-debug")
-async def sentry_debug() -> dict:
+async def sentry_debug() -> dict[str, str]:
     """Intentionally triggers an error to verify Sentry is capturing events."""
     _ = 1 / 0
     return {"status": "unreachable"}

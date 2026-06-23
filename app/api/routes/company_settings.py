@@ -1,12 +1,8 @@
-import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
-from sqlmodel import select
+from fastapi import APIRouter
 
-from app.api.deps import CurrentUser, SessionDep
-from app.core.time import get_datetime_utc
-from app.models import CompanySettings
+from app.api.deps import CompanySettingsServiceDep, CurrentUser
 from app.schemas import (
     CompanySettingsCreate,
     CompanySettingsPublic,
@@ -18,85 +14,35 @@ router = APIRouter(prefix="/company-settings", tags=["company-settings"])
 
 
 @router.get("/", response_model=CompanySettingsPublic)
-def get_company_settings(session: SessionDep, current_user: CurrentUser) -> Any:
-    """Get company settings for the current user."""
-    statement = select(CompanySettings).where(
-        CompanySettings.owner_id == current_user.id
-    )
-    settings = session.exec(statement).first()
-
-    if not settings:
-        raise HTTPException(status_code=404, detail="Company settings not found")
-
-    return settings
+async def get_company_settings(
+    current_user: CurrentUser, company_settings_service: CompanySettingsServiceDep
+) -> Any:
+    return await company_settings_service.get_for_owner(current_user.id)
 
 
 @router.post("/", response_model=CompanySettingsPublic)
-def create_company_settings(
+async def create_company_settings(
     *,
-    session: SessionDep,
     current_user: CurrentUser,
+    company_settings_service: CompanySettingsServiceDep,
     settings_in: CompanySettingsCreate,
 ) -> Any:
-    """Create company settings for the current user."""
-    existing = session.exec(
-        select(CompanySettings).where(CompanySettings.owner_id == current_user.id)
-    ).first()
-
-    if existing:
-        raise HTTPException(status_code=400, detail="Company settings already exist")
-
-    settings = CompanySettings.model_validate(
-        settings_in, update={"owner_id": current_user.id}
-    )
-    session.add(settings)
-    session.commit()
-    session.refresh(settings)
-    return settings
+    return await company_settings_service.create(settings_in, current_user.id)
 
 
 @router.put("/", response_model=CompanySettingsPublic)
-def update_company_settings(
+async def update_company_settings(
     *,
-    session: SessionDep,
     current_user: CurrentUser,
+    company_settings_service: CompanySettingsServiceDep,
     settings_in: CompanySettingsUpdate,
 ) -> Any:
-    """Update company settings for the current user."""
-    statement = select(CompanySettings).where(
-        CompanySettings.owner_id == current_user.id
-    )
-    settings = session.exec(statement).first()
-
-    if not settings:
-        settings = CompanySettings(
-            owner_id=current_user.id,
-            name=settings_in.name or "My Company",
-        )
-        session.add(settings)
-        session.commit()
-        session.refresh(settings)
-
-    update_dict = settings_in.model_dump(exclude_unset=True)
-    update_dict["updated_at"] = get_datetime_utc()
-    settings.sqlmodel_update(update_dict)
-    session.add(settings)
-    session.commit()
-    session.refresh(settings)
-    return settings
+    return await company_settings_service.upsert(current_user.id, settings_in)
 
 
 @router.delete("/", response_model=Message)
-def delete_company_settings(session: SessionDep, current_user: CurrentUser) -> Any:
-    """Delete company settings for the current user."""
-    statement = select(CompanySettings).where(
-        CompanySettings.owner_id == current_user.id
-    )
-    settings = session.exec(statement).first()
-
-    if not settings:
-        raise HTTPException(status_code=404, detail="Company settings not found")
-
-    session.delete(settings)
-    session.commit()
+async def delete_company_settings(
+    current_user: CurrentUser, company_settings_service: CompanySettingsServiceDep
+) -> Any:
+    await company_settings_service.delete(current_user.id)
     return Message(message="Company settings deleted successfully")

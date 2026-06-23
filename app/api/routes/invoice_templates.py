@@ -2,14 +2,10 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from sqlmodel import col, func, select
 
-from app.api.deps import CurrentUser, SessionDep
-from app.core.time import get_datetime_utc
-from app.models import InvoiceTemplate
+from app.api.deps import CurrentUser, InvoiceTemplateServiceDep
 from app.schemas import (
     InvoiceTemplateCreate,
-    InvoiceTemplateKind,
     InvoiceTemplatePublic,
     InvoiceTemplatesPublic,
     InvoiceTemplateUpdate,
@@ -20,245 +16,78 @@ from app.utils import parse_excel_file
 router = APIRouter(prefix="/invoice-templates", tags=["invoice-templates"])
 
 
-def _ensure_valid_payload(template: InvoiceTemplate) -> None:
-    if template.kind == InvoiceTemplateKind.built_in:
-        if not template.built_in_id:
-            raise HTTPException(
-                status_code=422, detail="built_in_id is required for kind=built_in"
-            )
-        if (
-            template.custom_data is not None
-            or template.imported_html
-            or template.imported_pdf_data_url
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail="built_in templates cannot include custom/imported data",
-            )
-
-    if template.kind == InvoiceTemplateKind.custom:
-        if template.custom_data is None:
-            raise HTTPException(
-                status_code=422, detail="custom_data is required for kind=custom"
-            )
-        if (
-            template.built_in_id
-            or template.imported_html
-            or template.imported_pdf_data_url
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail="custom templates cannot include built_in/imported data",
-            )
-
-    if template.kind == InvoiceTemplateKind.imported_html:
-        if not template.imported_html:
-            raise HTTPException(
-                status_code=422,
-                detail="imported_html is required for kind=imported_html",
-            )
-        if (
-            template.built_in_id
-            or template.custom_data is not None
-            or template.imported_pdf_data_url
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail="imported_html templates cannot include other template data",
-            )
-
-    if template.kind == InvoiceTemplateKind.imported_pdf:
-        if not template.imported_pdf_data_url:
-            raise HTTPException(
-                status_code=422,
-                detail="imported_pdf_data_url is required for kind=imported_pdf",
-            )
-        if (
-            template.built_in_id
-            or template.custom_data is not None
-            or template.imported_html
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail="imported_pdf templates cannot include other template data",
-            )
-
-    if template.kind == InvoiceTemplateKind.imported_excel:
-        if template.imported_excel_columns is None:
-            raise HTTPException(
-                status_code=422,
-                detail="imported_excel_columns is required for kind=imported_excel",
-            )
-        if (
-            template.built_in_id
-            or template.custom_data is not None
-            or template.imported_html
-            or template.imported_pdf_data_url
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail="imported_excel templates cannot include other template data",
-            )
-
-
 @router.get("/", response_model=InvoiceTemplatesPublic)
-def read_invoice_templates(
-    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 200
+async def read_invoice_templates(
+    current_user: CurrentUser,
+    invoice_template_service: InvoiceTemplateServiceDep,
+    skip: int = 0,
+    limit: int = 200,
 ) -> Any:
-    base_filter = InvoiceTemplate.owner_id == current_user.id
-
-    count_stmt = select(func.count()).select_from(InvoiceTemplate).where(base_filter)
-    count = session.exec(count_stmt).one()
-
-    stmt = (
-        select(InvoiceTemplate)
-        .where(base_filter)
-        .order_by(col(InvoiceTemplate.updated_at).desc())
-        .offset(skip)
-        .limit(limit)
+    templates, count = await invoice_template_service.list_items(
+        current_user.id, skip=skip, limit=limit
     )
-    data = session.exec(stmt).all()
-    return InvoiceTemplatesPublic(data=data, count=count)
+    return InvoiceTemplatesPublic(data=templates, count=count)
 
 
 @router.get("/active", response_model=InvoiceTemplatePublic)
-def read_active_invoice_template(session: SessionDep, current_user: CurrentUser) -> Any:
-    stmt = select(InvoiceTemplate).where(
-        InvoiceTemplate.owner_id == current_user.id,
-        InvoiceTemplate.is_active == True,  # noqa: E712
-    )
-    t = session.exec(stmt).first()
-    if not t:
-        raise HTTPException(status_code=404, detail="No active invoice template")
-    return t
+async def read_active_invoice_template(
+    current_user: CurrentUser,
+    invoice_template_service: InvoiceTemplateServiceDep,
+) -> Any:
+    return await invoice_template_service.get_active(current_user.id)
 
 
 @router.get("/{id}", response_model=InvoiceTemplatePublic)
-def read_invoice_template(
-    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+async def read_invoice_template(
+    current_user: CurrentUser,
+    invoice_template_service: InvoiceTemplateServiceDep,
+    id: uuid.UUID,
 ) -> Any:
-    t = session.get(InvoiceTemplate, id)
-    if not t:
-        raise HTTPException(status_code=404, detail="Invoice template not found")
-    if t.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-    return t
+    return await invoice_template_service.get_owned(id, current_user.id)
 
 
 @router.post("/", response_model=InvoiceTemplatePublic)
-def create_invoice_template(
+async def create_invoice_template(
     *,
-    session: SessionDep,
     current_user: CurrentUser,
+    invoice_template_service: InvoiceTemplateServiceDep,
     template_in: InvoiceTemplateCreate,
 ) -> Any:
-    t = InvoiceTemplate.model_validate(
-        template_in, update={"owner_id": current_user.id}
-    )
-    _ensure_valid_payload(t)
-
-    # If creating an active template, deactivate others first
-    if t.is_active:
-        stmt = select(InvoiceTemplate).where(
-            InvoiceTemplate.owner_id == current_user.id
-        )
-        others = session.exec(stmt).all()
-        for o in others:
-            if o.is_active:
-                o.is_active = False
-                o.updated_at = get_datetime_utc()
-                session.add(o)
-
-    session.add(t)
-    session.commit()
-    session.refresh(t)
-    return t
+    return await invoice_template_service.create(template_in, current_user.id)
 
 
 @router.put("/{id}", response_model=InvoiceTemplatePublic)
-def update_invoice_template(
+async def update_invoice_template(
     *,
-    session: SessionDep,
     current_user: CurrentUser,
+    invoice_template_service: InvoiceTemplateServiceDep,
     id: uuid.UUID,
     template_in: InvoiceTemplateUpdate,
 ) -> Any:
-    t = session.get(InvoiceTemplate, id)
-    if not t:
-        raise HTTPException(status_code=404, detail="Invoice template not found")
-    if t.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-
-    update_dict = template_in.model_dump(exclude_unset=True)
-
-    # Apply update
-    t.sqlmodel_update(update_dict)
-    t.updated_at = get_datetime_utc()
-    _ensure_valid_payload(t)
-
-    # If toggled active, deactivate others
-    if update_dict.get("is_active") is True:
-        stmt = select(InvoiceTemplate).where(
-            InvoiceTemplate.owner_id == current_user.id,
-            InvoiceTemplate.id != t.id,
-        )
-        others = session.exec(stmt).all()
-        for o in others:
-            if o.is_active:
-                o.is_active = False
-                o.updated_at = get_datetime_utc()
-                session.add(o)
-
-    session.add(t)
-    session.commit()
-    session.refresh(t)
-    return t
+    return await invoice_template_service.update(id, current_user.id, template_in)
 
 
 @router.post("/{id}/activate", response_model=InvoiceTemplatePublic)
-def activate_invoice_template(
-    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+async def activate_invoice_template(
+    current_user: CurrentUser,
+    invoice_template_service: InvoiceTemplateServiceDep,
+    id: uuid.UUID,
 ) -> Any:
-    t = session.get(InvoiceTemplate, id)
-    if not t:
-        raise HTTPException(status_code=404, detail="Invoice template not found")
-    if t.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-
-    stmt = select(InvoiceTemplate).where(InvoiceTemplate.owner_id == current_user.id)
-    all_templates = session.exec(stmt).all()
-    now = get_datetime_utc()
-
-    for tpl in all_templates:
-        next_active = tpl.id == t.id
-        if tpl.is_active != next_active:
-            tpl.is_active = next_active
-            tpl.updated_at = now
-            session.add(tpl)
-
-    session.commit()
-    session.refresh(t)
-    return t
+    return await invoice_template_service.activate(id, current_user.id)
 
 
 @router.delete("/{id}")
-def delete_invoice_template(
-    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+async def delete_invoice_template(
+    current_user: CurrentUser,
+    invoice_template_service: InvoiceTemplateServiceDep,
+    id: uuid.UUID,
 ) -> Message:
-    t = session.get(InvoiceTemplate, id)
-    if not t:
-        raise HTTPException(status_code=404, detail="Invoice template not found")
-    if t.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-
-    session.delete(t)
-    session.commit()
+    await invoice_template_service.delete(id, current_user.id)
     return Message(message="Invoice template deleted successfully")
 
 
 @router.post("/parse-excel")
-def parse_excel_preview(
-    _session: SessionDep,
+async def parse_excel_preview(
     _current_user: CurrentUser,
     file: UploadFile = File(...),
 ) -> Any:
@@ -273,7 +102,7 @@ def parse_excel_preview(
         )
 
     try:
-        file_content = file.file.read()
+        file_content = await file.read()
         if len(file_content) == 0:
             raise HTTPException(status_code=400, detail="Empty file provided")
 

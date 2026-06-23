@@ -1,11 +1,9 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
-from sqlmodel import col, func, select
+from fastapi import APIRouter
 
-from app.api.deps import CurrentUser, SessionDep
-from app.models import Customer
+from app.api.deps import CurrentUser, CustomerServiceDep
 from app.schemas import (
     CustomerCreate,
     CustomerPublic,
@@ -18,88 +16,41 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 
 
 @router.get("/", response_model=CustomersPublic)
-def read_customers(
-    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100
+async def read_customers(
+    current_user: CurrentUser, customer_service: CustomerServiceDep, skip: int = 0, limit: int = 100
 ) -> Any:
-    """Retrieve customers owned by the current user."""
-    count_statement = (
-        select(func.count())
-        .select_from(Customer)
-        .where(Customer.owner_id == current_user.id)
-    )
-    count = session.exec(count_statement).one()
-    statement = (
-        select(Customer)
-        .where(Customer.owner_id == current_user.id)
-        .order_by(col(Customer.created_at).desc())
-        .offset(skip)
-        .limit(limit)
-    )
-    customers = session.exec(statement).all()
+    customers, count = await customer_service.list_items(current_user.id, skip=skip, limit=limit)
     return CustomersPublic(data=customers, count=count)
 
 
 @router.get("/{id}", response_model=CustomerPublic)
-def read_customer(
-    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+async def read_customer(
+    current_user: CurrentUser, customer_service: CustomerServiceDep, id: uuid.UUID
 ) -> Any:
-    """Get customer by ID."""
-    customer = session.get(Customer, id)
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    if customer.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-    return customer
+    return await customer_service.get_owned(id, current_user.id)
 
 
 @router.post("/", response_model=CustomerPublic)
-def create_customer(
-    *, session: SessionDep, current_user: CurrentUser, customer_in: CustomerCreate
+async def create_customer(
+    *, current_user: CurrentUser, customer_service: CustomerServiceDep, customer_in: CustomerCreate
 ) -> Any:
-    """Create a new customer."""
-    customer = Customer.model_validate(
-        customer_in, update={"owner_id": current_user.id}
-    )
-    session.add(customer)
-    session.commit()
-    session.refresh(customer)
-    return customer
+    return await customer_service.create(customer_in, current_user.id)
 
 
 @router.put("/{id}", response_model=CustomerPublic)
-def update_customer(
+async def update_customer(
     *,
-    session: SessionDep,
     current_user: CurrentUser,
+    customer_service: CustomerServiceDep,
     id: uuid.UUID,
     customer_in: CustomerUpdate,
 ) -> Any:
-    """Update a customer."""
-    customer = session.get(Customer, id)
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    if customer.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-    update_dict = customer_in.model_dump(exclude_unset=True)
-    from app.core.time import get_datetime_utc
-    update_dict["updated_at"] = get_datetime_utc()
-    customer.sqlmodel_update(update_dict)
-    session.add(customer)
-    session.commit()
-    session.refresh(customer)
-    return customer
+    return await customer_service.update(id, current_user.id, customer_in)
 
 
 @router.delete("/{id}")
-def delete_customer(
-    session: SessionDep, current_user: CurrentUser, id: uuid.UUID
+async def delete_customer(
+    current_user: CurrentUser, customer_service: CustomerServiceDep, id: uuid.UUID
 ) -> Message:
-    """Delete a customer."""
-    customer = session.get(Customer, id)
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    if customer.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-    session.delete(customer)
-    session.commit()
+    await customer_service.delete(id, current_user.id)
     return Message(message="Customer deleted successfully")

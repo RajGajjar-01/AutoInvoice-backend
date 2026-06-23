@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
@@ -95,3 +96,42 @@ def test_logout(client: TestClient) -> None:
     )
     assert r.status_code == 200
     assert "message" in r.json()
+
+
+try:
+    from pwdlib.hashers.bcrypt import BcryptHasher  # noqa: F401
+
+    _bcrypt_available = True
+except Exception:
+    _bcrypt_available = False
+
+
+@pytest.mark.skipif(not _bcrypt_available, reason="pip install pwdlib[bcrypt]")
+def test_login_upgrades_bcrypt_hash_to_argon2(client: TestClient, db: Session) -> None:
+    from pwdlib.hashers.bcrypt import BcryptHasher
+
+    from app.core.security import verify_password
+    from app.models import User
+
+    email = random_email()
+    password = random_lower_string()
+
+    bcrypt_hash = BcryptHasher().hash(password)
+    assert bcrypt_hash.startswith("$2")
+
+    user = User(email=email, hashed_password=bcrypt_hash)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    assert user.hashed_password.startswith("$2")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/auth/login", json={"email": email, "password": password}
+    )
+    assert response.status_code == 200
+
+    db.refresh(user)
+    assert user.hashed_password.startswith("$argon2")
+    verified, updated_hash = verify_password(password, user.hashed_password)
+    assert verified
+    assert updated_hash is None

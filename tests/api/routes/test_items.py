@@ -1,16 +1,15 @@
 import uuid
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from app import crud
 from app.core.config import settings
 from app.models import User
 from tests.utils.item import create_random_item
 
 
 def get_superuser(db: Session) -> User:
-    user = crud.get_user_by_email(session=db, email=settings.FIRST_SUPERUSER)
+    user = db.exec(select(User).where(User.email == settings.FIRST_SUPERUSER)).first()
     assert user is not None
     assert user.id is not None
     return user
