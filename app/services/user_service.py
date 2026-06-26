@@ -2,12 +2,17 @@ import uuid
 from typing import Any
 
 from app.core.security import get_password_hash, verify_password
-from app.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.models import User
 from app.repositories.user_repository import UserRepository
-from app.schemas import UserCreate, UserUpdate, UserUpdateMe
+from app.schemas import UserCreate, UserRegister, UserUpdate, UserUpdateMe
 
 DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$MjQyZWE1MzBjYjJlZTI0Yw$YTU4NGM5ZTZmYjE2NzZlZjY0ZWY3ZGRkY2U2OWFjNjk"
+
+
+def _validate_password(password: str) -> None:
+    if len(password) < 8:
+        raise ValidationError("Password must be at least 8 characters long")
 
 
 class UserService:
@@ -26,9 +31,10 @@ class UserService:
             raise NotFoundError("User not found")
         return user
 
-    async def signup(self, user_create: UserCreate) -> User:
+    async def signup(self, user_create: UserRegister) -> User:
         if await self.repo.get_by_email(user_create.email):
             raise ConflictError("A user with this email already exists")
+        _validate_password(user_create.password)
         hashed_password = get_password_hash(user_create.password)
         return await self.repo.create(user_create, hashed_password)
 
@@ -45,6 +51,7 @@ class UserService:
         return db_user
 
     async def update_password(self, db_user: User, new_password: str) -> User:
+        _validate_password(new_password)
         return await self.repo.update(
             db_user, {"hashed_password": get_password_hash(new_password)}
         )
@@ -85,6 +92,7 @@ class UserService:
         update_data = user_in.model_dump(exclude_unset=True)
         if "password" in update_data:
             password = update_data.pop("password")
+            _validate_password(password)
             update_data["hashed_password"] = get_password_hash(password)
         return await self.repo.update(user, update_data)
 
@@ -99,9 +107,6 @@ class UserService:
     async def list_users(self, *, skip: int, limit: int) -> tuple[list[User], int]:
         return await self.repo.list_paginated(skip=skip, limit=limit)
 
-    async def list_users_page(self, *, page: int, page_size: int) -> tuple[list[User], int]:
-        return await self.repo.list_page(page=page, page_size=page_size)
-
     async def create_user_as_admin(
         self,
         *,
@@ -112,6 +117,7 @@ class UserService:
     ) -> User:
         if await self.repo.get_by_email(email):
             raise ConflictError("A user with this email already exists")
+        _validate_password(password)
         user_create = UserCreate(
             email=email, password=password, full_name=full_name, is_superuser=is_superuser
         )
@@ -137,6 +143,7 @@ class UserService:
             update_data["email"] = email
             update_data["is_verified"] = False
         if password:
+            _validate_password(password)
             update_data["hashed_password"] = get_password_hash(password)
         if full_name is not None:
             update_data["full_name"] = full_name

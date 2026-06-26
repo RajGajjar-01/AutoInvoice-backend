@@ -2,6 +2,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Query, status
+from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, TableServiceDep
 from app.schemas import (
@@ -124,7 +125,11 @@ async def delete_table_row(
     await table_service.delete_row(table_id, current_user.id, row_id)
 
 
-@router.post("/{table_id}/rows/bulk-delete")
+class BulkDeleteResponse(BaseModel):
+    deleted: int
+
+
+@router.post("/{table_id}/rows/bulk-delete", response_model=BulkDeleteResponse)
 async def bulk_delete_table_rows(
     current_user: CurrentUser,
     table_service: TableServiceDep,
@@ -132,7 +137,7 @@ async def bulk_delete_table_rows(
     row_ids: list[uuid.UUID],
 ) -> Any:
     deleted = await table_service.bulk_delete_rows(table_id, current_user.id, row_ids)
-    return {"deleted": deleted}
+    return BulkDeleteResponse(deleted=deleted)
 
 
 @router.post(

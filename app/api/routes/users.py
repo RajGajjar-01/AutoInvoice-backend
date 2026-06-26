@@ -30,10 +30,9 @@ async def update_user_me(
     return UserPublic.model_validate(user)
 
 
-@router.delete("/me", response_model=Message)
-async def delete_user_me(current_user: CurrentUser, user_service: UserServiceDep) -> Any:
+@router.delete("/me", status_code=204)
+async def delete_user_me(current_user: CurrentUser, user_service: UserServiceDep) -> None:
     await user_service.delete_me(current_user)
-    return Message(message="User deleted successfully")
 
 
 @router.get("/{user_id}", response_model=UserPublic)
@@ -52,9 +51,8 @@ async def update_user(
     return UserPublic.model_validate(user)
 
 
-@router.delete("/{user_id}", response_model=Message)
+@router.delete("/{user_id}", status_code=204)
 async def delete_user(
     user_id: uuid.UUID, superuser: SuperUserDep, user_service: UserServiceDep
-) -> Message:
+) -> None:
     await user_service.delete_user(user_id, superuser)
-    return Message(message="User deleted successfully")

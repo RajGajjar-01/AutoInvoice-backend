@@ -80,12 +80,7 @@ class InvoiceTemplateService:
         _ensure_valid_payload(template)
 
         if template.is_active:
-            all_templates = await self.repo.get_all_by_owner(owner_id)
-            for t in all_templates:
-                if t.is_active:
-                    t.is_active = False
-                    t.updated_at = get_datetime_utc()
-                    self.repo.session.add(t)
+            await self.repo.deactivate_all_except(owner_id)
             await self.repo.session.flush()
 
         return await self.repo.add(template)
@@ -101,26 +96,16 @@ class InvoiceTemplateService:
         _ensure_valid_payload(template)
 
         if update_data.get("is_active") is True:
-            all_templates = await self.repo.get_all_by_owner(owner_id)
-            for t in all_templates:
-                if t.id != template.id and t.is_active:
-                    t.is_active = False
-                    t.updated_at = get_datetime_utc()
-                    self.repo.session.add(t)
+            await self.repo.deactivate_all_except(owner_id, exclude_id=template.id)
             await self.repo.session.flush()
 
         return await self.repo.add(template)
 
     async def activate(self, template_id: uuid.UUID, owner_id: uuid.UUID) -> InvoiceTemplate:
         template = await self.get_owned(template_id, owner_id)
-        all_templates = await self.repo.get_all_by_owner(owner_id)
-        now = get_datetime_utc()
-        for t in all_templates:
-            next_active = t.id == template.id
-            if t.is_active != next_active:
-                t.is_active = next_active
-                t.updated_at = now
-                self.repo.session.add(t)
+        await self.repo.deactivate_all_except(owner_id, exclude_id=template.id)
+        template.is_active = True
+        template.updated_at = get_datetime_utc()
         await self.repo.session.commit()
         await self.repo.session.refresh(template)
         return template

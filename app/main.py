@@ -43,20 +43,15 @@ app = FastAPI(
 
 @app.exception_handler(AuthError)
 async def auth_exception_handler(request: Request, exc: AuthError) -> JSONResponse:
-    """Handle all authentication errors consistently."""
     logger.warning(f"Auth error: {exc.code} - {exc.message}")
 
-    status_code = 401
-    if exc.code in ["invalid_credentials", "user_not_found"]:
-        status_code = 401
-    elif exc.code in ["user_already_exists"]:
-        status_code = 400
-    elif exc.code in ["token_expired", "session_expired"]:
-        status_code = 401
-    elif exc.code in ["unauthorized", "mfa_required"]:
-        status_code = 403
-    elif exc.code in ["rate_limit_exceeded"]:
-        status_code = 429
+    status_map = {
+        "user_already_exists": 400,
+        "unauthorized": 403,
+        "mfa_required": 403,
+        "rate_limit_exceeded": 429,
+    }
+    status_code = status_map.get(exc.code, 401)
 
     return JSONResponse(
         status_code=status_code,

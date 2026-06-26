@@ -1,9 +1,17 @@
+import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import CurrentUser, InvoiceServiceDep
+from app.api.deps import (
+    CompanySettingsServiceDep,
+    CurrentUser,
+    InvoicePDFServiceDep,
+    InvoiceServiceDep,
+    WhatsAppServiceDep,
+)
+from app.exceptions import NotFoundError
 from app.schemas import (
     DashboardStats,
     DocumentType,
@@ -13,8 +21,14 @@ from app.schemas import (
     InvoiceStatus,
     InvoiceUpdate,
     InvoiceWithCustomer,
-    Message,
+    SendEmailRequest,
+    SendReminderRequest,
+    SendWhatsAppRequest,
 )
+from app.services.email_service import send_email
+from app.services.whatsapp_service import WhatsAppService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -57,7 +71,7 @@ async def read_invoice(
     return await invoice_service.get_with_customer(id, current_user.id)
 
 
-@router.post("/", response_model=InvoicePublic)
+@router.post("/", response_model=InvoicePublic, status_code=201)
 async def create_invoice(
     *, current_user: CurrentUser, invoice_service: InvoiceServiceDep, invoice_in: InvoiceCreate
 ) -> Any:
@@ -75,9 +89,122 @@ async def update_invoice(
     return await invoice_service.update(id, current_user.id, invoice_in)
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", status_code=204)
 async def delete_invoice(
     current_user: CurrentUser, invoice_service: InvoiceServiceDep, id: uuid.UUID
-) -> Message:
+) -> None:
     await invoice_service.delete(id, current_user.id)
-    return Message(message="Invoice deleted successfully")
+
+
+@router.post("/{id}/send-email", status_code=200)
+async def send_invoice_email(
+    *,
+    current_user: CurrentUser,
+    invoice_service: InvoiceServiceDep,
+    pdf_service: InvoicePDFServiceDep,
+    company_settings_service: CompanySettingsServiceDep,
+    id: uuid.UUID,
+    req: SendEmailRequest,
+) -> dict[str, str]:
+    invoice = await invoice_service.get_with_customer(id, current_user.id)
+    if not invoice.customer:
+        raise NotFoundError("Customer not found for this invoice")
+
+    company = await company_settings_service.get_for_owner(current_user.id)
+    pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
+    subject = req.subject or f"Invoice {invoice.invoice_number} from {company.name}"
+    html_content = f"""<p>Dear {invoice.customer.name},</p>
+<p>Please find your invoice <strong>{invoice.invoice_number}</strong> attached.</p>
+<p>Amount: {invoice.currency} {invoice.grand_total:,.2f}<br>
+Due Date: {invoice.due_date or 'N/A'}</p>
+<p>Thank you for your business!</p>"""
+
+    send_email(
+        email_to=req.to_email,
+        subject=subject,
+        html_content=html_content,
+        attachment=(
+            f"invoice_{invoice.invoice_number}.pdf",
+            pdf_bytes,
+            "application/pdf",
+        ),
+    )
+    return {"message": "Email sent successfully"}
+
+
+@router.post("/{id}/send-whatsapp", status_code=200)
+async def send_invoice_whatsapp(
+    *,
+    current_user: CurrentUser,
+    invoice_service: InvoiceServiceDep,
+    pdf_service: InvoicePDFServiceDep,
+    company_settings_service: CompanySettingsServiceDep,
+    whatsapp_service: WhatsAppServiceDep,
+    id: uuid.UUID,
+    req: SendWhatsAppRequest,
+) -> dict[str, Any]:
+    invoice = await invoice_service.get_with_customer(id, current_user.id)
+    if not invoice.customer:
+        raise NotFoundError("Customer not found for this invoice")
+
+    company = await company_settings_service.get_for_owner(current_user.id)
+    pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
+
+    wa_svc = whatsapp_service
+    if company.whatsapp_enabled and company.openwa_api_key and company.openwa_session_id:
+        wa_svc = WhatsAppService(
+            base_url=company.openwa_base_url,
+            api_key=company.openwa_api_key,
+            session_id=company.openwa_session_id,
+        )
+
+    chat_id = f"{req.to_phone.lstrip('+')}@c.us"
+    result = wa_svc.send_document(
+        chat_id=chat_id,
+        pdf_bytes=pdf_bytes,
+        filename=f"invoice_{invoice.invoice_number}.pdf",
+        caption=f"Invoice {invoice.invoice_number} - {invoice.currency} {invoice.grand_total:,.2f}",
+    )
+    return {"message": "WhatsApp message sent", "message_id": result.get("messageId")}
+
+
+@router.post("/{id}/send-reminder", status_code=200)
+async def send_invoice_reminder(
+    *,
+    current_user: CurrentUser,
+    invoice_service: InvoiceServiceDep,
+    pdf_service: InvoicePDFServiceDep,
+    company_settings_service: CompanySettingsServiceDep,
+    whatsapp_service: WhatsAppServiceDep,
+    id: uuid.UUID,
+    req: SendReminderRequest,
+) -> dict[str, Any]:
+    invoice = await invoice_service.get_with_customer(id, current_user.id)
+    if not invoice.customer:
+        raise NotFoundError("Customer not found for this invoice")
+
+    company = await company_settings_service.get_for_owner(current_user.id)
+    pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
+
+    wa_svc = whatsapp_service
+    if company.whatsapp_enabled and company.openwa_api_key and company.openwa_session_id:
+        wa_svc = WhatsAppService(
+            base_url=company.openwa_base_url,
+            api_key=company.openwa_api_key,
+            session_id=company.openwa_session_id,
+        )
+
+    chat_id = f"{req.to_phone.lstrip('+')}@c.us"
+
+    caption = f"Reminder: Invoice {invoice.invoice_number} is due. "
+    if req.days_overdue:
+        caption += f"({req.days_overdue} days overdue) "
+    caption += f"Amount: {invoice.currency} {invoice.grand_total:,.2f}"
+
+    result = whatsapp_service.send_document(
+        chat_id=chat_id,
+        pdf_bytes=pdf_bytes,
+        filename=f"invoice_{invoice.invoice_number}.pdf",
+        caption=caption,
+    )
+    return {"message": "Reminder sent", "message_id": result.get("messageId")}

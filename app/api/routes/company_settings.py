@@ -7,7 +7,6 @@ from app.schemas import (
     CompanySettingsCreate,
     CompanySettingsPublic,
     CompanySettingsUpdate,
-    Message,
 )
 
 router = APIRouter(prefix="/company-settings", tags=["company-settings"])
@@ -20,7 +19,7 @@ async def get_company_settings(
     return await company_settings_service.get_for_owner(current_user.id)
 
 
-@router.post("/", response_model=CompanySettingsPublic)
+@router.post("/", response_model=CompanySettingsPublic, status_code=201)
 async def create_company_settings(
     *,
     current_user: CurrentUser,
@@ -40,9 +39,8 @@ async def update_company_settings(
     return await company_settings_service.upsert(current_user.id, settings_in)
 
 
-@router.delete("/", response_model=Message)
+@router.delete("/", status_code=204)
 async def delete_company_settings(
     current_user: CurrentUser, company_settings_service: CompanySettingsServiceDep
-) -> Any:
+) -> None:
     await company_settings_service.delete(current_user.id)
-    return Message(message="Company settings deleted successfully")

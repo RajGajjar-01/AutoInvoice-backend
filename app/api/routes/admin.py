@@ -29,21 +29,21 @@ class AdminUserUpdate(SQLModel):
 async def list_users(
     superuser: SuperUserDep,
     user_service: UserServiceDep,
-    page: int = 1,
-    page_size: int = 50,
+    skip: int = 0,
+    limit: int = 50,
 ) -> PaginatedResponse[UserPublic]:
-    users, total = await user_service.list_users_page(page=page, page_size=page_size)
-    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+    users, total = await user_service.list_users(skip=skip, limit=limit)
+    total_pages = (total + limit - 1) // limit if total > 0 else 1
     return PaginatedResponse(
         data=[UserPublic.model_validate(u) for u in users],
         total=total,
-        page=page,
-        page_size=page_size,
+        page=skip // limit + 1,
+        page_size=limit,
         total_pages=total_pages,
     )
 
 
-@router.post("/users", response_model=UserPublic)
+@router.post("/users", response_model=UserPublic, status_code=201)
 async def create_user(
     superuser: SuperUserDep, user_in: AdminUserCreate, user_service: UserServiceDep
 ) -> UserPublic:
@@ -80,9 +80,8 @@ async def update_user(
     return UserPublic.model_validate(user)
 
 
-@router.delete("/users/{user_id}", response_model=Message)
+@router.delete("/users/{user_id}", status_code=204)
 async def delete_user(
     superuser: SuperUserDep, user_id: uuid.UUID, user_service: UserServiceDep
-) -> Message:
+) -> None:
     await user_service.delete_user(user_id, superuser)
-    return Message(message="User deleted successfully")

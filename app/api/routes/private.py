@@ -17,7 +17,7 @@ class PrivateUserCreate(BaseModel):
     is_superuser: bool = False
 
 
-@router.post("/users/", response_model=UserPublic)
+@router.post("/users/", response_model=UserPublic, status_code=201)
 async def create_user(user_in: PrivateUserCreate, user_service: UserServiceDep) -> Any:
     user = await user_service.create_user_private(
         email=user_in.email,

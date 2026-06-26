@@ -1,4 +1,3 @@
-import secrets
 import warnings
 from typing import Annotated, Any, Literal
 
@@ -22,13 +21,6 @@ def parse_cors(v: Any) -> list[str] | str:
     raise ValueError(v)
 
 
-def parse_database_url(v: Any) -> str | None:
-    """Parse DATABASE_URL from Railway or construct from individual vars."""
-    if isinstance(v, str) and v:
-        return v
-    return None
-
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -36,7 +28,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     API_V1_STR: str = "/api/v1"
-    SECRET_KEY: str = secrets.token_urlsafe(32)
+    SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     FRONTEND_HOST: str = ""
@@ -111,6 +103,10 @@ class Settings(BaseSettings):
             self.EMAILS_FROM_NAME = self.PROJECT_NAME
         return self
 
+    OPENWA_BASE_URL: str = "http://localhost:2785"
+    OPENWA_API_KEY: str = ""
+    OPENWA_SESSION_ID: str = ""
+
     EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 48
 
     @computed_field  # type: ignore[prop-decorator]
@@ -122,25 +118,25 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER: EmailStr = "admin@example.com"
     FIRST_SUPERUSER_PASSWORD: str = "changethis"
 
-    def _check_default_secret(self, var_name: str, value: str | None) -> None:
-        if value == "changethis":
-            message = (
-                f'The value of {var_name} is "changethis", '
-                "for security, please change it, at least for deployments."
-            )
-            if self.ENVIRONMENT == "local":
-                warnings.warn(message, stacklevel=1)
-            else:
-                raise ValueError(message)
-
     @model_validator(mode="after")
-    def _enforce_non_default_secrets(self) -> Self:
-        self._check_default_secret("SECRET_KEY", self.SECRET_KEY)
-        self._check_default_secret("POSTGRES_PASSWORD", self.POSTGRES_PASSWORD)
-        self._check_default_secret(
-            "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
-        )
-
+    def _enforce_secrets(self) -> Self:
+        if not self.SECRET_KEY:
+            raise ValueError("SECRET_KEY must be set in environment")
+        if self.SECRET_KEY == "changethis":
+            raise ValueError(
+                'SECRET_KEY is still set to "changethis", please change it'
+            )
+        if self.POSTGRES_PASSWORD and self.POSTGRES_PASSWORD == "changethis":
+            raise ValueError(
+                'POSTGRES_PASSWORD is still set to "changethis", please change it'
+            )
+        if (
+            self.FIRST_SUPERUSER_PASSWORD
+            and self.FIRST_SUPERUSER_PASSWORD == "changethis"
+        ):
+            raise ValueError(
+                'FIRST_SUPERUSER_PASSWORD is still set to "changethis", please change it'
+            )
         return self
 
     @model_validator(mode="after")

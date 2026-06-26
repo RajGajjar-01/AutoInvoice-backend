@@ -46,7 +46,7 @@ async def read_invoice_template(
     return await invoice_template_service.get_owned(id, current_user.id)
 
 
-@router.post("/", response_model=InvoiceTemplatePublic)
+@router.post("/", response_model=InvoiceTemplatePublic, status_code=201)
 async def create_invoice_template(
     *,
     current_user: CurrentUser,
@@ -76,17 +76,26 @@ async def activate_invoice_template(
     return await invoice_template_service.activate(id, current_user.id)
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", status_code=204)
 async def delete_invoice_template(
     current_user: CurrentUser,
     invoice_template_service: InvoiceTemplateServiceDep,
     id: uuid.UUID,
-) -> Message:
+) -> None:
     await invoice_template_service.delete(id, current_user.id)
-    return Message(message="Invoice template deleted successfully")
 
 
-@router.post("/parse-excel")
+from pydantic import BaseModel
+
+
+class ExcelParseResponse(BaseModel):
+    columns: list[Any]
+    column_mapping: dict[str, int]
+    data: list[dict[str, Any]]
+    total_rows: int
+
+
+@router.post("/parse-excel", response_model=ExcelParseResponse)
 async def parse_excel_preview(
     _current_user: CurrentUser,
     file: UploadFile = File(...),
@@ -105,13 +114,15 @@ async def parse_excel_preview(
         file_content = await file.read()
         if len(file_content) == 0:
             raise HTTPException(status_code=400, detail="Empty file provided")
+        if len(file_content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
         result = parse_excel_file(file_content)
 
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
 
-        return result
+        return ExcelParseResponse(**result)
 
     except HTTPException:
         raise

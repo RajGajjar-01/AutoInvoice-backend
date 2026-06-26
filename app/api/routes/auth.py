@@ -5,15 +5,17 @@ from fastapi import APIRouter, Cookie, HTTPException, Response
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import SQLModel
 
-from app.api.deps import CurrentUser, UserServiceDep
+from app.api.deps import CurrentUser, SessionDep, UserServiceDep
 from app.core import security
 from app.core.config import settings
+from app.models import User
 from app.schemas import (
     Message,
     NewPassword,
     Token,
-    UserCreate,
+    UpdatePassword,
     UserPublic,
+    UserRegister,
     UserUpdateMe,
 )
 from app.services.email_service import (
@@ -23,7 +25,7 @@ from app.services.email_service import (
     verify_password_reset_token,
 )
 
-router = APIRouter(tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 ACCESS_TOKEN_MAX_AGE = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 REFRESH_TOKEN_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
@@ -61,8 +63,8 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
     )
 
 
-@router.post("/auth/signup", response_model=AuthResponse)
-async def signup(response: Response, user_in: UserCreate, user_service: UserServiceDep) -> AuthResponse:
+@router.post("/signup", response_model=AuthResponse, status_code=201)
+async def signup(response: Response, user_in: UserRegister, user_service: UserServiceDep) -> AuthResponse:
     user = await user_service.signup(user_in)
     access_token = security.create_access_token(subject=user.id)
     refresh_token = security.create_refresh_token(subject=user.id)
@@ -75,7 +77,7 @@ async def signup(response: Response, user_in: UserCreate, user_service: UserServ
     )
 
 
-@router.post("/auth/login", response_model=AuthResponse)
+@router.post("/login", response_model=AuthResponse)
 async def login(response: Response, body: LoginRequest, user_service: UserServiceDep) -> AuthResponse:
     user = await user_service.authenticate(body.email, body.password)
     if not user:
@@ -91,9 +93,10 @@ async def login(response: Response, body: LoginRequest, user_service: UserServic
     )
 
 
-@router.post("/auth/refresh", response_model=Token)
-def refresh_token(
+@router.post("/refresh", response_model=Token)
+async def refresh_token(
     response: Response,
+    session: SessionDep,
     refresh_token: Annotated[str | None, Cookie()] = None,
 ) -> Token:
     if not refresh_token:
@@ -111,6 +114,16 @@ def refresh_token(
     except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
+    import uuid
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Invalid user ID format")
+
+    user = await session.get(User, user_uuid)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
+
     new_access_token = security.create_access_token(subject=user_id)
     new_refresh_token = security.create_refresh_token(subject=user_id)
     _set_auth_cookies(response, new_access_token, new_refresh_token)
@@ -122,19 +135,19 @@ def refresh_token(
     )
 
 
-@router.post("/auth/logout", response_model=Message)
+@router.post("/logout", response_model=Message)
 def logout(response: Response) -> Message:
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
     return Message(message="Logged out successfully")
 
 
-@router.get("/auth/me", response_model=UserPublic)
+@router.get("/me", response_model=UserPublic)
 def get_current_user_info(current_user: CurrentUser) -> Any:
     return UserPublic.model_validate(current_user)
 
 
-@router.patch("/auth/me", response_model=UserPublic)
+@router.patch("/me", response_model=UserPublic)
 async def update_current_user(
     current_user: CurrentUser, user_in: UserUpdateMe, user_service: UserServiceDep
 ) -> Any:
@@ -142,7 +155,7 @@ async def update_current_user(
     return UserPublic.model_validate(user)
 
 
-@router.post("/auth/forgot-password", response_model=Message)
+@router.post("/forgot-password", response_model=Message)
 async def forgot_password(email: str, user_service: UserServiceDep) -> Message:
     user = await user_service.get_by_email(email)
     if user:
@@ -160,7 +173,7 @@ async def forgot_password(email: str, user_service: UserServiceDep) -> Message:
     )
 
 
-@router.post("/auth/reset-password", response_model=Message)
+@router.post("/reset-password", response_model=Message)
 async def reset_password(body: NewPassword, user_service: UserServiceDep) -> Message:
     email = verify_password_reset_token(token=body.token)
     if not email:
@@ -174,22 +187,13 @@ async def reset_password(body: NewPassword, user_service: UserServiceDep) -> Mes
     return Message(message="Password updated successfully")
 
 
-@router.post("/auth/update-password", response_model=Message)
+@router.post("/update-password", response_model=Message)
 async def update_password(
-    current_user: CurrentUser, body: dict[str, str], user_service: UserServiceDep
+    current_user: CurrentUser, body: UpdatePassword, user_service: UserServiceDep
 ) -> Message:
-    current_password = body.get("current_password")
-    new_password = body.get("new_password")
-
-    if not current_password or not new_password:
-        raise HTTPException(
-            status_code=400,
-            detail="Current password and new password are required",
-        )
-
-    user = await user_service.authenticate(current_user.email, current_password)
+    user = await user_service.authenticate(current_user.email, body.current_password)
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect current password")
 
-    await user_service.update_password(user, new_password)
+    await user_service.update_password(user, body.new_password)
     return Message(message="Password updated successfully")

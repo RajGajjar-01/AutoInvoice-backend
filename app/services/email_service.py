@@ -28,13 +28,25 @@ def render_email_template(*, template_name: str, context: dict[str, Any]) -> str
     return Template(template_str).safe_substitute(context)
 
 
-def send_email(*, email_to: str, subject: str = "", html_content: str = "") -> None:
+def send_email(
+    *,
+    email_to: str,
+    subject: str = "",
+    html_content: str = "",
+    attachment: tuple[str, bytes, str] | None = None,
+) -> None:
     assert settings.emails_enabled, "no provided configuration for email variables"
     message = emails.Message(
         subject=subject,
         html=html_content,
         mail_from=(settings.EMAILS_FROM_NAME, settings.EMAILS_FROM_EMAIL),
     )
+    if attachment:
+        message.attach(
+            filename=attachment[0],
+            data=attachment[1],
+            content_type=attachment[2],
+        )
     smtp_options = {"host": settings.SMTP_HOST, "port": settings.SMTP_PORT}
     if settings.SMTP_TLS:
         smtp_options["tls"] = True

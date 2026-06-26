@@ -24,12 +24,14 @@ from app.repositories.user_repository import UserRepository
 from app.schemas import TokenPayload
 from app.services.company_settings_service import CompanySettingsService
 from app.services.customer_service import CustomerService
+from app.services.invoice_pdf_service import InvoicePDFService
 from app.services.invoice_service import InvoiceService
 from app.services.invoice_template_service import InvoiceTemplateService
 from app.services.item_service import ItemService
 from app.services.notification_service import NotificationService
 from app.services.table_service import TableService
 from app.services.user_service import UserService
+from app.services.whatsapp_service import WhatsAppService
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login",
@@ -223,3 +225,17 @@ def get_invoice_service(
 
 
 InvoiceServiceDep = Annotated[InvoiceService, Depends(get_invoice_service)]
+
+
+def get_invoice_pdf_service() -> InvoicePDFService:
+    return InvoicePDFService()
+
+
+InvoicePDFServiceDep = Annotated[InvoicePDFService, Depends(get_invoice_pdf_service)]
+
+
+def get_whatsapp_service() -> WhatsAppService:
+    return WhatsAppService()
+
+
+WhatsAppServiceDep = Annotated[WhatsAppService, Depends(get_whatsapp_service)]

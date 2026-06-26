@@ -9,7 +9,6 @@ from app.schemas import (
     CustomerPublic,
     CustomersPublic,
     CustomerUpdate,
-    Message,
 )
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -30,7 +29,7 @@ async def read_customer(
     return await customer_service.get_owned(id, current_user.id)
 
 
-@router.post("/", response_model=CustomerPublic)
+@router.post("/", response_model=CustomerPublic, status_code=201)
 async def create_customer(
     *, current_user: CurrentUser, customer_service: CustomerServiceDep, customer_in: CustomerCreate
 ) -> Any:
@@ -48,9 +47,8 @@ async def update_customer(
     return await customer_service.update(id, current_user.id, customer_in)
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", status_code=204)
 async def delete_customer(
     current_user: CurrentUser, customer_service: CustomerServiceDep, id: uuid.UUID
-) -> Message:
+) -> None:
     await customer_service.delete(id, current_user.id)
-    return Message(message="Customer deleted successfully")

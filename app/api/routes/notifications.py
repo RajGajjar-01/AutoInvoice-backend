@@ -31,7 +31,7 @@ async def get_notifications(
     return NotificationsPublic(data=notifications, count=count, unread_count=unread_count)
 
 
-@router.post("/", response_model=NotificationPublic)
+@router.post("/", response_model=NotificationPublic, status_code=201)
 async def create_notification(
     *,
     current_user: CurrentUser,
@@ -65,15 +65,13 @@ async def mark_all_read(current_user: CurrentUser, notification_service: Notific
     return Message(message=f"Marked {n} notifications as read")
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", status_code=204)
 async def delete_notification(
     current_user: CurrentUser, notification_service: NotificationServiceDep, id: uuid.UUID
-) -> Message:
+) -> None:
     await notification_service.delete(id, current_user.id)
-    return Message(message="Notification deleted successfully")
 
 
-@router.delete("/")
-async def clear_all(current_user: CurrentUser, notification_service: NotificationServiceDep) -> Message:
-    n = await notification_service.clear_all(current_user.id)
-    return Message(message=f"Deleted {n} notifications")
+@router.delete("/", status_code=204)
+async def clear_all(current_user: CurrentUser, notification_service: NotificationServiceDep) -> None:
+    await notification_service.clear_all(current_user.id)

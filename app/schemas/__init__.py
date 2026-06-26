@@ -27,6 +27,11 @@ from app.schemas.invoice import (
     InvoiceUpdate,
     InvoiceWithCustomer,
 )
+from app.schemas.invoice_send import (
+    SendEmailRequest,
+    SendReminderRequest,
+    SendWhatsAppRequest,
+)
 from app.schemas.invoice_template import (
     InvoiceTemplateCreate,
     InvoiceTemplateKind,
@@ -81,4 +86,5 @@ __all__ = [
     "CompanySettingsCreate", "CompanySettingsPublic", "CompanySettingsUpdate",
     "NotificationCreate", "NotificationPublic", "NotificationsPublic",
     "NotificationType", "NotificationUpdate",
+    "SendEmailRequest", "SendReminderRequest", "SendWhatsAppRequest",
 ]

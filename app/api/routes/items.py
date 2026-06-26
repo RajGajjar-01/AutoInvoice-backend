@@ -32,12 +32,17 @@ async def read_items(
     return ItemsPublic(data=items, count=count)
 
 
+@router.get("/categories/list")
+async def list_categories(current_user: CurrentUser, item_service: ItemServiceDep) -> list[str]:
+    return await item_service.list_categories(current_user.id)
+
+
 @router.get("/{id}", response_model=ItemPublic)
 async def read_item(current_user: CurrentUser, item_service: ItemServiceDep, id: uuid.UUID) -> Any:
     return await item_service.get_owned(id, current_user.id)
 
 
-@router.post("/", response_model=ItemPublic)
+@router.post("/", response_model=ItemPublic, status_code=201)
 async def create_item(
     *, current_user: CurrentUser, item_service: ItemServiceDep, item_in: ItemCreate
 ) -> Any:
@@ -70,12 +75,6 @@ async def adjust_stock(
     )
 
 
-@router.get("/categories/list")
-async def list_categories(current_user: CurrentUser, item_service: ItemServiceDep) -> list[str]:
-    return await item_service.list_categories(current_user.id)
-
-
-@router.delete("/{id}")
-async def delete_item(current_user: CurrentUser, item_service: ItemServiceDep, id: uuid.UUID) -> Message:
+@router.delete("/{id}", status_code=204)
+async def delete_item(current_user: CurrentUser, item_service: ItemServiceDep, id: uuid.UUID) -> None:
     await item_service.delete(id, current_user.id)
-    return Message(message="Item deleted successfully")

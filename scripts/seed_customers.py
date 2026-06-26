@@ -1,0 +1,56 @@
+import asyncio
+import httpx
+import json
+
+BASE = "http://localhost:8000/api/v1"
+
+CUSTOMERS = [
+    {"name": "TechSolutions Pvt Ltd", "party_type": "customer", "email": "accounts@techsolutions.in", "phone": "9876543210", "whatsapp": "9876543210", "billing_address": "14, Whitefield Industrial Area, Bengaluru, KA 560066", "gstin": "29AADCT1234Q1ZX", "opening_balance": 15000, "credit_limit": 500000, "payment_terms": "Net 30", "tags": ["VIP", "IT"]},
+    {"name": "Green Earth Organics", "party_type": "customer", "email": "billing@greenearth.co", "phone": "9812345678", "whatsapp": "9812345678", "billing_address": "Plot 7, Phase 2, Andheri East, Mumbai, MH 400093", "gstin": "27BCPFG5678L1ZY", "opening_balance": 0, "credit_limit": 200000, "payment_terms": "Net 15", "tags": ["Organic", "Retail"]},
+    {"name": "Star Retail Chains", "party_type": "customer", "email": "finance@starretail.com", "phone": "9900112233", "billing_address": "88, Anna Salai, Chennai, TN 600002", "gstin": "33ZRTLS9012M1ZA", "opening_balance": 25000, "credit_limit": 1000000, "payment_terms": "Net 45", "tags": ["Bulk", "Retail"]},
+    {"name": "Prime Logistics & Co", "party_type": "customer", "email": "ops@primelogistics.in", "phone": "9988776655", "billing_address": "Sector 18, Gurugram, HR 122001", "gstin": "06PLCAB3456N1ZP", "opening_balance": 5000, "credit_limit": 300000, "payment_terms": "Net 30", "tags": ["Logistics"]},
+    {"name": "Bharti Fabrics", "party_type": "supplier", "email": "supply@bhartifabrics.in", "phone": "9765432109", "billing_address": "Ring Road, Surat, GJ 395002", "gstin": "24BFACT7890P1ZB", "payment_terms": "Advance 50%, balance on delivery", "tags": ["Supplier", "Textiles"]},
+    {"name": "Sunrise Electronics", "party_type": "supplier", "email": "purchase@sunriseelec.in", "phone": "9654321098", "billing_address": "Nehru Place, New Delhi, DL 110019", "gstin": "07SELEC2345Q1ZS", "payment_terms": "Net 20", "tags": ["Supplier", "Electronics"]},
+    {"name": "Globe Imports Pvt Ltd", "party_type": "both", "email": "trade@globeimports.com", "phone": "9543210987", "billing_address": "Free Trade Zone, JNPT, Navi Mumbai, MH 400707", "gstin": "27GIPL0001R1ZG", "opening_balance": 10000, "credit_limit": 750000, "payment_terms": "Net 30", "tags": ["Import", "B2B"]},
+    {"name": "City Office Supplies", "party_type": "both", "email": "info@cityoffice.in", "phone": "9432109876", "billing_address": "MG Road, Pune, MH 411001", "gstin": "27COSPL5678S1ZC", "payment_terms": "Net 45", "tags": ["Office", "Stationery"]},
+    {"name": "Raj Technology Services", "party_type": "customer", "email": "billing@rajtech.io", "phone": "9321098765", "billing_address": "HITEC City, Hyderabad, TS 500081", "gstin": "36RTSVS4321H1ZR", "opening_balance": 8000, "credit_limit": 400000, "payment_terms": "Net 30", "tags": ["IT", "SaaS"]},
+    {"name": "Delta Manufacturing Ltd", "party_type": "customer", "email": "accounts@deltamfg.in", "phone": "9210987654", "billing_address": "MIDC, Pune, MH 411019", "gstin": "27DMLTD6789D1ZM", "opening_balance": 50000, "credit_limit": 2000000, "payment_terms": "Net 60", "tags": ["Manufacturing", "VIP"]},
+    {"name": "Horizon Media Group", "party_type": "customer", "email": "finance@horizonmedia.in", "phone": "9109876543", "billing_address": "Bandra West, Mumbai, MH 400050", "gstin": "27HMGRP1111H1ZH", "credit_limit": 150000, "payment_terms": "Net 15", "tags": ["Media", "Agency"]},
+    {"name": "Apex Consulting Partners", "party_type": "customer", "email": "ap@apexconsult.in", "phone": "9098765432", "billing_address": "DLF Cyber City, Gurugram, HR 122002", "gstin": "06APCPL2222A1ZC", "opening_balance": 20000, "credit_limit": 600000, "payment_terms": "Net 30", "tags": ["Consulting", "Premium"]},
+    {"name": "Blue Wave Technologies", "party_type": "customer", "email": "cfo@bluewave.tech", "phone": "8987654321", "billing_address": "Electronic City, Bengaluru, KA 560100", "gstin": "29BWT3333B1ZB", "credit_limit": 300000, "payment_terms": "Net 30", "tags": ["Tech", "Startup"]},
+    {"name": "Cosmic Prints & Packaging", "party_type": "customer", "email": "orders@cosmicprints.co", "phone": "8876543210", "billing_address": "Industrial Area, Ahmedabad, GJ 382481", "gstin": "24CPPKG4444C1ZP", "opening_balance": 3000, "credit_limit": 100000, "payment_terms": "Net 20", "tags": ["Printing", "MSME"]},
+    {"name": "FreshMart Retail Pvt Ltd", "party_type": "customer", "email": "billing@freshmart.in", "phone": "8765432109", "billing_address": "Koramangala, Bengaluru, KA 560034", "gstin": "29FMRTL5555F1ZF", "opening_balance": 12000, "credit_limit": 250000, "payment_terms": "Net 15", "tags": ["Retail", "FMCG"]},
+    {"name": "Neon Digital Studio", "party_type": "customer", "email": "hello@neondigital.in", "phone": "8654321098", "billing_address": "HSR Layout, Bengaluru, KA 560102", "gstin": "29NEONS6666N1ZD", "credit_limit": 80000, "payment_terms": "Due on receipt", "tags": ["Design", "Agency"]},
+    {"name": "Swift Cargo Solutions", "party_type": "supplier", "email": "ops@swiftcargo.in", "phone": "8543210987", "billing_address": "Jawaharlal Nehru Port, Navi Mumbai, MH 400706", "gstin": "27SCARG7777S1ZS", "payment_terms": "Net 10", "tags": ["Logistics", "Supplier"]},
+    {"name": "Pinnacle Law Associates", "party_type": "customer", "email": "billing@pinnaclelaw.in", "phone": "8432109876", "billing_address": "Connaught Place, New Delhi, DL 110001", "gstin": "07PLAWA8888P1ZL", "opening_balance": 5000, "credit_limit": 200000, "payment_terms": "Net 30", "tags": ["Legal", "Services"]},
+    {"name": "Urban Studio Architects", "party_type": "customer", "email": "accounts@urbanstudio.in", "phone": "8321098765", "billing_address": "Jubilee Hills, Hyderabad, TS 500033", "gstin": "36USARC9999U1ZU", "credit_limit": 500000, "payment_terms": "50% advance", "tags": ["Architecture", "Design"]},
+    {"name": "Bright Future Edutech", "party_type": "customer", "email": "finance@brightfuture.edu", "phone": "8210987654", "billing_address": "Sector 62, Noida, UP 201309", "gstin": "09BFETC0001B1ZE", "credit_limit": 150000, "payment_terms": "Net 30", "tags": ["EdTech", "Startup"]},
+]
+
+
+async def get_token():
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            f"{BASE}/auth/login",
+            json={"email": "test@test.com", "password": "test1234"},
+        )
+        return r.json()["access_token"]
+
+
+async def main():
+    token = await get_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient() as client:
+        for i, c in enumerate(CUSTOMERS, 1):
+            r = await client.post(
+                f"{BASE}/customers/",
+                json=c,
+                headers=headers,
+            )
+            if r.status_code == 201:
+                print(f"✅ [{i}/20] {c['name']}")
+            else:
+                print(f"❌ [{i}/20] {c['name']} — {r.status_code} {r.text}")
+
+
+asyncio.run(main())

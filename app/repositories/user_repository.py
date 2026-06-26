@@ -33,16 +33,3 @@ class UserRepository(BaseRepository[User]):
         )
         result = await self.session.exec(statement)
         return list(result.all()), count
-
-    async def list_page(self, *, page: int, page_size: int) -> tuple[list[User], int]:
-        count_result = await self.session.exec(select(func.count()).select_from(User))
-        count = count_result.one()
-        offset = (page - 1) * page_size
-        statement = (
-            select(User)
-            .order_by(col(User.created_at).desc())
-            .offset(offset)
-            .limit(page_size)
-        )
-        result = await self.session.exec(statement)
-        return list(result.all()), count

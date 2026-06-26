@@ -26,7 +26,7 @@ class InvoiceRepository(BaseRepository[Invoice]):
         statement = (
             select(Invoice)
             .where(Invoice.id == invoice_id, Invoice.owner_id == owner_id)
-            .options(selectinload(Invoice.customer))  # type: ignore[arg-type]
+            .options(selectinload(Invoice.customer))
         )
         result = await self.session.exec(statement)
         return result.first()
@@ -66,41 +66,27 @@ class InvoiceRepository(BaseRepository[Invoice]):
     async def get_dashboard_stats(
         self, owner_id: uuid.UUID, document_type: str | None
     ) -> dict[str, Any]:
-        base_filter = Invoice.owner_id == owner_id
+        base_filter = [Invoice.owner_id == owner_id]
         if document_type:
-            base_filter = base_filter & (Invoice.document_type == document_type)
+            base_filter.append(Invoice.document_type == document_type)
 
-        total_invoices = (
+        row = (
             await self.session.exec(
-                select(func.count()).select_from(Invoice).where(base_filter)
-            )
-        ).one()
-
-        paid_count = (
-            await self.session.exec(
-                select(func.count())
+                select(
+                    func.count().label("total_invoices"),
+                    func.count().filter(Invoice.status == "paid").label("paid_count"),
+                    func.count().filter(Invoice.status == "unpaid").label("unpaid_count"),
+                    func.count().filter(Invoice.status == "overdue").label("overdue_count"),
+                    func.coalesce(
+                        func.sum(Invoice.grand_total).filter(Invoice.status == "paid"), 0
+                    ).label("total_revenue"),
+                )
                 .select_from(Invoice)
-                .where(base_filter, Invoice.status == "paid")
+                .where(*base_filter)
             )
         ).one()
 
-        unpaid_count = (
-            await self.session.exec(
-                select(func.count())
-                .select_from(Invoice)
-                .where(base_filter, Invoice.status == "unpaid")
-            )
-        ).one()
-
-        overdue_count = (
-            await self.session.exec(
-                select(func.count())
-                .select_from(Invoice)
-                .where(base_filter, Invoice.status == "overdue")
-            )
-        ).one()
-
-        total_customers = (
+        customer_count = (
             await self.session.exec(
                 select(func.count())
                 .select_from(Customer)
@@ -108,21 +94,13 @@ class InvoiceRepository(BaseRepository[Invoice]):
             )
         ).one()
 
-        total_revenue = (
-            await self.session.exec(
-                select(func.coalesce(func.sum(Invoice.grand_total), 0)).where(
-                    base_filter, Invoice.status == "paid"
-                )
-            )
-        ).one()
-
         return {
-            "total_invoices": total_invoices,
-            "paid_count": paid_count,
-            "unpaid_count": unpaid_count,
-            "overdue_count": overdue_count,
-            "total_customers": total_customers,
-            "total_revenue": float(total_revenue),
+            "total_invoices": row.total_invoices,
+            "paid_count": row.paid_count,
+            "unpaid_count": row.unpaid_count,
+            "overdue_count": row.overdue_count,
+            "total_customers": customer_count,
+            "total_revenue": float(row.total_revenue),
         }
 
     async def create(

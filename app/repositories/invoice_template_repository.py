@@ -1,8 +1,10 @@
 import uuid
 from typing import Any
 
+from sqlalchemy import update as sa_update
 from sqlmodel import col, func, select
 
+from app.core.time import get_datetime_utc
 from app.models import InvoiceTemplate
 from app.repositories.base import BaseRepository
 from app.schemas import InvoiceTemplateCreate
@@ -46,10 +48,18 @@ class InvoiceTemplateRepository(BaseRepository[InvoiceTemplate]):
         result = await self.session.exec(statement)
         return result.first()
 
-    async def get_all_by_owner(self, owner_id: uuid.UUID) -> list[InvoiceTemplate]:
-        statement = select(InvoiceTemplate).where(InvoiceTemplate.owner_id == owner_id)
-        result = await self.session.exec(statement)
-        return list(result.all())
+    async def deactivate_all_except(self, owner_id: uuid.UUID, exclude_id: uuid.UUID | None = None) -> None:
+        stmt = (
+            sa_update(InvoiceTemplate)
+            .where(
+                InvoiceTemplate.owner_id == owner_id,
+                InvoiceTemplate.is_active == True,
+            )
+            .values(is_active=False, updated_at=get_datetime_utc())
+        )
+        if exclude_id:
+            stmt = stmt.where(InvoiceTemplate.id != exclude_id)
+        await self.session.exec(stmt)
 
     async def create(self, template_in: InvoiceTemplateCreate, owner_id: uuid.UUID) -> InvoiceTemplate:
         template = InvoiceTemplate.model_validate(template_in, update={"owner_id": owner_id})

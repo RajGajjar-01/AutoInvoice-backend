@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: A4;
+    margin: 20mm;
+  }
+  body {
+    font-family: 'Helvetica', 'Arial', sans-serif;
+    font-size: 11pt;
+    color: #222;
+    margin: 0;
+    padding: 0;
+  }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
+  .company-info h1 { font-size: 18pt; margin: 0 0 4px; }
+  .company-info p { margin: 2px 0; font-size: 10pt; color: #555; }
+  .invoice-title { text-align: right; }
+  .invoice-title h2 { font-size: 16pt; margin: 0; text-transform: uppercase; color: #333; }
+  .invoice-title p { margin: 2px 0; font-size: 10pt; }
+  .divider { border: none; border-top: 2px solid #333; margin: 15px 0; }
+  .row { display: flex; justify-content: space-between; margin-bottom: 20px; }
+  .col { flex: 1; }
+  .col h3 { font-size: 10pt; margin: 0 0 6px; text-transform: uppercase; color: #666; }
+  .col p { margin: 2px 0; font-size: 10pt; }
+  table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+  th { background: #333; color: #fff; font-size: 9pt; padding: 8px 6px; text-align: left; text-transform: uppercase; }
+  td { padding: 6px; font-size: 10pt; border-bottom: 1px solid #ddd; }
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+  .totals { margin-left: auto; width: 300px; }
+  .totals td { border: none; padding: 4px 6px; }
+  .totals .grand-total td { font-weight: bold; font-size: 12pt; border-top: 2px solid #333; padding-top: 6px; }
+  .notes { margin-top: 30px; font-size: 9pt; color: #555; }
+  .bank-details { margin-top: 20px; font-size: 9pt; }
+  .bank-details h3 { font-size: 10pt; margin: 0 0 4px; text-transform: uppercase; color: #666; }
+  .bank-details p { margin: 1px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="company-info">
+    <h1>{{ company.name }}</h1>
+    {% if company.address %}<p>{{ company.address }}</p>{% endif %}
+    {% if company.city or company.state or company.pincode %}
+    <p>{{ company.city }}{% if company.city and company.state %}, {% endif %}{{ company.state }} {{ company.pincode }}</p>
+    {% endif %}
+    {% if company.phone %}<p>Phone: {{ company.phone }}</p>{% endif %}
+    {% if company.email %}<p>Email: {{ company.email }}</p>{% endif %}
+    {% if company.gstin %}<p>GSTIN: {{ company.gstin }}</p>{% endif %}
+  </div>
+  <div class="invoice-title">
+    <h2>{{ document_type | upper }}</h2>
+    <p><strong>INV-{{ invoice.invoice_number }}</strong></p>
+    <p>Date: {{ invoice.invoice_date }}</p>
+    {% if invoice.due_date %}<p>Due Date: {{ invoice.due_date }}</p>{% endif %}
+    <p>Status: {{ invoice.status | upper }}</p>
+  </div>
+</div>
+
+<hr class="divider">
+
+<div class="row">
+  <div class="col">
+    <h3>Bill To</h3>
+    <p><strong>{{ customer.name }}</strong></p>
+    {% if customer.billing_address %}<p>{{ customer.billing_address }}</p>{% endif %}
+    {% if customer.gstin %}<p>GSTIN: {{ customer.gstin }}</p>{% endif %}
+    {% if customer.state %}<p>State: {{ customer.state }}</p>{% endif %}
+  </div>
+  <div class="col">
+    <h3>Ship To</h3>
+    {% if customer.shipping_address %}
+    <p>{{ customer.shipping_address }}</p>
+    {% elif customer.billing_address %}
+    <p>{{ customer.billing_address }}</p>
+    {% else %}
+    <p>{{ customer.address }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<hr class="divider">
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Description</th>
+      <th class="text-center">Qty</th>
+      <th class="text-right">Rate</th>
+      <th class="text-right">Tax</th>
+      <th class="text-right">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ item.name }}{% if item.description %}<br><small>{{ item.description }}</small>{% endif %}</td>
+      <td class="text-center">{{ item.quantity }} {% if item.unit %}{{ item.unit }}{% endif %}</td>
+      <td class="text-right">{{ format_currency(item.price, currency) }}</td>
+      <td class="text-right">{{ item.tax }}%</td>
+      <td class="text-right">{{ format_currency(item.quantity * item.price * (1 + item.tax / 100), currency) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<table class="totals">
+  <tr>
+    <td>Subtotal</td>
+    <td class="text-right">{{ format_currency(invoice.subtotal, currency) }}</td>
+  </tr>
+  <tr>
+    <td>Total Tax</td>
+    <td class="text-right">{{ format_currency(invoice.total_tax, currency) }}</td>
+  </tr>
+  {% if invoice.discount %}
+  <tr>
+    <td>Discount</td>
+    <td class="text-right">-{{ format_currency(invoice.discount, currency) }}</td>
+  </tr>
+  {% endif %}
+  <tr class="grand-total">
+    <td>Grand Total</td>
+    <td class="text-right">{{ format_currency(invoice.grand_total, currency) }}</td>
+  </tr>
+</table>
+
+{% if invoice.notes %}
+<div class="notes">
+  <h3>Notes</h3>
+  <p>{{ invoice.notes }}</p>
+</div>
+{% endif %}
+
+{% if company.bank_name or company.upi_id %}
+<hr class="divider">
+<div class="bank-details">
+  <h3>Payment Details</h3>
+  {% if company.bank_name %}<p><strong>Bank:</strong> {{ company.bank_name }}</p>{% endif %}
+  {% if company.bank_account %}<p><strong>Account:</strong> {{ company.bank_account }}</p>{% endif %}
+  {% if company.bank_ifsc %}<p><strong>IFSC:</strong> {{ company.bank_ifsc }}</p>{% endif %}
+  {% if company.bank_branch %}<p><strong>Branch:</strong> {{ company.bank_branch }}</p>{% endif %}
+  {% if company.upi_id %}<p><strong>UPI ID:</strong> {{ company.upi_id }}</p>{% endif %}
+</div>
+{% endif %}
+
+{% if company.terms_and_conditions %}
+<hr class="divider">
+<div class="notes">
+  <h3>Terms & Conditions</h3>
+  <p>{{ company.terms_and_conditions }}</p>
+</div>
+{% endif %}
+
+</body>
+</html>

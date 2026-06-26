@@ -28,6 +28,19 @@ class CompanySettingsBase(SQLModel):
     proforma_prefix: str = Field(default="PRO-", max_length=20)
     challan_prefix: str = Field(default="CHL-", max_length=20)
 
+    whatsapp_enabled: bool = False
+    openwa_base_url: str = Field(default="http://localhost:2785", max_length=500)
+    openwa_api_key: str | None = Field(default=None, max_length=500)
+    openwa_session_id: str | None = Field(default=None, max_length=255)
+
+    smtp_host: str | None = Field(default=None, max_length=255)
+    smtp_port: int = 587
+    smtp_user: str | None = Field(default=None, max_length=255)
+    smtp_password: str | None = Field(default=None, max_length=500)
+    smtp_tls: bool = True
+    emails_from_email: str | None = Field(default=None, max_length=255)
+    emails_from_name: str | None = Field(default=None, max_length=255)
+
 
 class CompanySettingsCreate(CompanySettingsBase):
     pass
@@ -56,6 +69,19 @@ class CompanySettingsUpdate(SQLModel):
     quotation_prefix: str | None = Field(default=None, max_length=20)
     proforma_prefix: str | None = Field(default=None, max_length=20)
     challan_prefix: str | None = Field(default=None, max_length=20)
+
+    whatsapp_enabled: bool | None = None
+    openwa_base_url: str | None = Field(default=None, max_length=500)
+    openwa_api_key: str | None = Field(default=None, max_length=500)
+    openwa_session_id: str | None = Field(default=None, max_length=255)
+
+    smtp_host: str | None = Field(default=None, max_length=255)
+    smtp_port: int | None = None
+    smtp_user: str | None = Field(default=None, max_length=255)
+    smtp_password: str | None = Field(default=None, max_length=500)
+    smtp_tls: bool | None = None
+    emails_from_email: str | None = Field(default=None, max_length=255)
+    emails_from_name: str | None = Field(default=None, max_length=255)
 
 
 class CompanySettingsPublic(CompanySettingsBase):

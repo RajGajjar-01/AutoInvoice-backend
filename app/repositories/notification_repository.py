@@ -1,6 +1,7 @@
 import uuid
 from typing import Any
 
+from sqlalchemy import delete as sa_delete, update as sa_update
 from sqlmodel import col, func, select
 
 from app.models import Notification
@@ -63,22 +64,17 @@ class NotificationRepository(BaseRepository[Notification]):
         return await self.add(notification)
 
     async def mark_all_read(self, owner_id: uuid.UUID) -> int:
-        statement = select(Notification).where(
-            Notification.owner_id == owner_id, Notification.read == False  # noqa: E712
+        stmt = (
+            sa_update(Notification)
+            .where(Notification.owner_id == owner_id, Notification.read == False)  # noqa: E712
+            .values(read=True)
         )
-        result = await self.session.exec(statement)
-        notifications = result.all()
-        for notification in notifications:
-            notification.read = True
-            self.session.add(notification)
+        result = await self.session.exec(stmt)
         await self.session.commit()
-        return len(notifications)
+        return result.rowcount
 
     async def clear_all(self, owner_id: uuid.UUID) -> int:
-        statement = select(Notification).where(Notification.owner_id == owner_id)
-        result = await self.session.exec(statement)
-        notifications = result.all()
-        for notification in notifications:
-            await self.session.delete(notification)
+        stmt = sa_delete(Notification).where(Notification.owner_id == owner_id)
+        result = await self.session.exec(stmt)
         await self.session.commit()
-        return len(notifications)
+        return result.rowcount
