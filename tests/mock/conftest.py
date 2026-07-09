@@ -29,6 +29,11 @@ def mock_user() -> MagicMock:
     user.updated_at = datetime.now(timezone.utc)
     user.is_verified = True
     user.avatar_url = None
+    user.google_email = None
+    user.google_access_token = None
+    user.google_refresh_token = None
+    user.google_token_expires_at = None
+    user.google_connected = False
     return user
 
 
@@ -45,6 +50,11 @@ def mock_superuser() -> MagicMock:
     user.updated_at = datetime.now(timezone.utc)
     user.is_verified = True
     user.avatar_url = None
+    user.google_email = None
+    user.google_access_token = None
+    user.google_refresh_token = None
+    user.google_token_expires_at = None
+    user.google_connected = False
     return user
 
 

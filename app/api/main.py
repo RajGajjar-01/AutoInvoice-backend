@@ -5,6 +5,7 @@ from app.api.routes import (
     auth,
     company_settings,
     customers,
+    google_auth,
     invoice_templates,
     invoices,
     items,
@@ -28,6 +29,7 @@ api_router.include_router(invoices.router)
 api_router.include_router(invoice_templates.router)
 api_router.include_router(company_settings.router)
 api_router.include_router(notifications.router)
+api_router.include_router(google_auth.router)
 
 
 if settings.ENVIRONMENT == "local":

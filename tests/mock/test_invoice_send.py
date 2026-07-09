@@ -1,3 +1,4 @@
+import base64
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -83,6 +84,14 @@ def _company(overrides=None):
     return co
 
 
+def _mock_user_service(access_token="fake-google-access-token", side_effect=None):
+    return AsyncMock(
+        get_valid_google_access_token=AsyncMock(
+            return_value=access_token, side_effect=side_effect
+        )
+    )
+
+
 def _setup_deps(mock_user, **overrides):
     app.dependency_overrides[deps.get_current_user] = lambda: mock_user
     if "invoice_service" in overrides:
@@ -93,6 +102,8 @@ def _setup_deps(mock_user, **overrides):
         app.dependency_overrides[deps.get_company_settings_service] = lambda: overrides["company_service"]
     if "whatsapp_service" in overrides:
         app.dependency_overrides[deps.get_whatsapp_service] = lambda: overrides["whatsapp_service"]
+    if "user_service" in overrides:
+        app.dependency_overrides[deps.get_user_service] = lambda: overrides["user_service"]
 
 
 def _mock_invoice_svc(get_with_customer_return=None, get_with_customer_side_effect=None):
@@ -109,15 +120,17 @@ class TestSendEmail:
         inv = _invoice()
         inv.customer = _customer()
         company = _company()
+        mock_user.google_email = "user@gmail.com"
 
         _setup_deps(
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
             pdf_service=MagicMock(generate=MagicMock(return_value=b"%PDF-1.4 fake")),
             company_service=AsyncMock(get_for_owner=AsyncMock(return_value=company)),
+            user_service=_mock_user_service(),
         )
 
-        with patch("app.api.routes.invoices.send_email") as mock_send:
+        with patch("app.api.routes.invoices.send_gmail_email") as mock_send:
             r = client.post(
                 f"{settings.API_V1_STR}/invoices/{inv.id}/send-email",
                 json={"to_email": "customer@test.com", "subject": "Your Invoice"},
@@ -127,7 +140,9 @@ class TestSendEmail:
         assert r.json() == {"message": "Email sent successfully"}
         mock_send.assert_called_once()
         _, kwargs = mock_send.call_args
-        assert kwargs["email_to"] == "customer@test.com"
+        assert kwargs["access_token"] == "fake-google-access-token"
+        assert kwargs["from_email"] == "user@gmail.com"
+        assert kwargs["to_email"] == "customer@test.com"
         assert kwargs["subject"] == "Your Invoice"
         assert kwargs["attachment"] == (
             "invoice_INV-001.pdf",
@@ -139,15 +154,17 @@ class TestSendEmail:
         inv = _invoice()
         inv.customer = _customer()
         company = _company()
+        mock_user.google_email = "user@gmail.com"
 
         _setup_deps(
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
             pdf_service=MagicMock(generate=MagicMock(return_value=b"pdf")),
             company_service=AsyncMock(get_for_owner=AsyncMock(return_value=company)),
+            user_service=_mock_user_service(),
         )
 
-        with patch("app.api.routes.invoices.send_email") as mock_send:
+        with patch("app.api.routes.invoices.send_gmail_email") as mock_send:
             r = client.post(
                 f"{settings.API_V1_STR}/invoices/{inv.id}/send-email",
                 json={"to_email": "customer@test.com"},
@@ -156,6 +173,29 @@ class TestSendEmail:
         assert r.status_code == 200
         _, kwargs = mock_send.call_args
         assert kwargs["subject"] == f"Invoice INV-001 from {company.name}"
+
+    def test_send_email_google_not_connected(self, client: TestClient, mock_user):
+        from app.exceptions import ValidationError
+
+        inv = _invoice()
+        inv.customer = _customer()
+
+        _setup_deps(
+            mock_user,
+            invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
+            user_service=_mock_user_service(
+                side_effect=ValidationError(
+                    "Connect your Google account in Settings to send invoice emails"
+                )
+            ),
+        )
+
+        r = client.post(
+            f"{settings.API_V1_STR}/invoices/{inv.id}/send-email",
+            json={"to_email": "customer@test.com"},
+        )
+        assert r.status_code == 422
+        assert "Google" in r.text
 
     def test_send_email_invalid_email_422(self, client: TestClient, mock_user):
         inv = _invoice()
@@ -203,6 +243,7 @@ class TestSendEmail:
             company_service=AsyncMock(
                 get_for_owner=AsyncMock(side_effect=NotFoundError("Company settings not found"))
             ),
+            user_service=_mock_user_service(),
         )
 
         r = client.post(
@@ -481,20 +522,16 @@ class TestSendReminder:
 
 class TestSendEmailServiceAttachment:
     @patch("app.services.email_service.settings")
-    @patch("app.services.email_service.emails.Message")
-    def test_send_email_with_attachment(self, mock_msg_cls, mock_settings):
+    @patch("app.services.email_service.httpx.post")
+    def test_send_email_with_attachment(self, mock_post, mock_settings):
         mock_settings.emails_enabled = True
         mock_settings.EMAILS_FROM_NAME = "Test"
         mock_settings.EMAILS_FROM_EMAIL = "test@test.com"
-        mock_settings.SMTP_HOST = "smtp.test.com"
-        mock_settings.SMTP_PORT = 587
-        mock_settings.SMTP_TLS = True
-        mock_settings.SMTP_SSL = False
-        mock_settings.SMTP_USER = None
-        mock_settings.SMTP_PASSWORD = None
+        mock_settings.BREVO_API_KEY = "fake-brevo-key"
 
-        mock_msg = MagicMock()
-        mock_msg_cls.return_value = mock_msg
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"messageId": "abc123"}
+        mock_post.return_value = mock_response
 
         from app.services.email_service import send_email
 
@@ -505,26 +542,26 @@ class TestSendEmailServiceAttachment:
             attachment=("invoice.pdf", b"pdf-data", "application/pdf"),
         )
 
-        mock_msg.attach.assert_called_once_with(
-            filename="invoice.pdf", data=b"pdf-data", content_type="application/pdf"
-        )
-        mock_msg.send.assert_called_once()
+        mock_post.assert_called_once()
+        _, kwargs = mock_post.call_args
+        assert kwargs["headers"]["api-key"] == "fake-brevo-key"
+        assert kwargs["json"]["to"] == [{"email": "x@y.com"}]
+        assert kwargs["json"]["attachment"] == [
+            {"name": "invoice.pdf", "content": base64.b64encode(b"pdf-data").decode("ascii")}
+        ]
+        mock_response.raise_for_status.assert_called_once()
 
     @patch("app.services.email_service.settings")
-    @patch("app.services.email_service.emails.Message")
-    def test_send_email_without_attachment(self, mock_msg_cls, mock_settings):
+    @patch("app.services.email_service.httpx.post")
+    def test_send_email_without_attachment(self, mock_post, mock_settings):
         mock_settings.emails_enabled = True
         mock_settings.EMAILS_FROM_NAME = "Test"
         mock_settings.EMAILS_FROM_EMAIL = "test@test.com"
-        mock_settings.SMTP_HOST = "smtp.test.com"
-        mock_settings.SMTP_PORT = 587
-        mock_settings.SMTP_TLS = True
-        mock_settings.SMTP_SSL = False
-        mock_settings.SMTP_USER = None
-        mock_settings.SMTP_PASSWORD = None
+        mock_settings.BREVO_API_KEY = "fake-brevo-key"
 
-        mock_msg = MagicMock()
-        mock_msg_cls.return_value = mock_msg
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"messageId": "abc123"}
+        mock_post.return_value = mock_response
 
         from app.services.email_service import send_email
 
@@ -534,5 +571,7 @@ class TestSendEmailServiceAttachment:
             html_content="<p>No file</p>",
         )
 
-        mock_msg.attach.assert_not_called()
-        mock_msg.send.assert_called_once()
+        mock_post.assert_called_once()
+        _, kwargs = mock_post.call_args
+        assert "attachment" not in kwargs["json"]
+        mock_response.raise_for_status.assert_called_once()

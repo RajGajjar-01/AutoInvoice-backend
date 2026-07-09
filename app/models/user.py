@@ -34,6 +34,19 @@ class User(UserBase, table=True):
         sa_type=DateTime(timezone=True),
     )
 
+    # Google OAuth (used to send invoice emails from the user's own Gmail account)
+    google_email: str | None = Field(default=None, max_length=255)
+    google_access_token: str | None = Field(default=None, max_length=4096)
+    google_refresh_token: str | None = Field(default=None, max_length=4096)
+    google_token_expires_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),
+    )
+
+    @property
+    def google_connected(self) -> bool:
+        return bool(self.google_refresh_token)
+
     items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
     data_tables: list["DataTable"] = Relationship(
         back_populates="owner", cascade_delete=True

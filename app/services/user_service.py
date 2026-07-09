@@ -1,11 +1,21 @@
 import uuid
+from datetime import timedelta
 from typing import Any
 
-from app.core.security import get_password_hash, verify_password
+from app.core.security import (
+    decrypt_token,
+    encrypt_token,
+    get_password_hash,
+    verify_password,
+)
+from app.core.time import get_datetime_utc
 from app.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.models import User
 from app.repositories.user_repository import UserRepository
 from app.schemas import UserCreate, UserRegister, UserUpdate, UserUpdateMe
+from app.services import google_oauth_service
+
+GOOGLE_TOKEN_REFRESH_MARGIN = timedelta(minutes=1)
 
 DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$MjQyZWE1MzBjYjJlZTI0Yw$YTU4NGM5ZTZmYjE2NzZlZjY0ZWY3ZGRkY2U2OWFjNjk"
 
@@ -154,6 +164,60 @@ class UserService:
         if not update_data:
             return user
         return await self.repo.update(user, update_data)
+
+    async def save_google_tokens(
+        self,
+        user: User,
+        *,
+        email: str,
+        access_token: str,
+        refresh_token: str | None,
+        expires_in: int,
+    ) -> User:
+        update_data: dict[str, Any] = {
+            "google_email": email,
+            "google_access_token": encrypt_token(access_token),
+            "google_token_expires_at": get_datetime_utc() + timedelta(seconds=expires_in),
+        }
+        if refresh_token:
+            update_data["google_refresh_token"] = encrypt_token(refresh_token)
+        return await self.repo.update(user, update_data)
+
+    async def get_valid_google_access_token(self, user: User) -> str:
+        if not user.google_refresh_token:
+            raise ValidationError(
+                "Connect your Google account in Settings to send invoice emails"
+            )
+        now = get_datetime_utc()
+        if (
+            user.google_access_token
+            and user.google_token_expires_at
+            and user.google_token_expires_at > now + GOOGLE_TOKEN_REFRESH_MARGIN
+        ):
+            return decrypt_token(user.google_access_token)
+
+        tokens = google_oauth_service.refresh_access_token(decrypt_token(user.google_refresh_token))
+        access_token: str = tokens["access_token"]
+        await self.repo.update(
+            user,
+            {
+                "google_access_token": encrypt_token(access_token),
+                "google_token_expires_at": now
+                + timedelta(seconds=tokens.get("expires_in", 3600)),
+            },
+        )
+        return access_token
+
+    async def disconnect_google(self, user: User) -> User:
+        return await self.repo.update(
+            user,
+            {
+                "google_email": None,
+                "google_access_token": None,
+                "google_refresh_token": None,
+                "google_token_expires_at": None,
+            },
+        )
 
     async def create_user_private(
         self,

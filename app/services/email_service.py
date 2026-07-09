@@ -1,3 +1,4 @@
+import base64
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -5,7 +6,7 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
-import emails
+import httpx
 import jwt
 from jwt.exceptions import InvalidTokenError
 
@@ -13,6 +14,8 @@ from app.core import security
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+BREVO_SEND_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 @dataclass
@@ -36,28 +39,33 @@ def send_email(
     attachment: tuple[str, bytes, str] | None = None,
 ) -> None:
     assert settings.emails_enabled, "no provided configuration for email variables"
-    message = emails.Message(
-        subject=subject,
-        html=html_content,
-        mail_from=(settings.EMAILS_FROM_NAME, settings.EMAILS_FROM_EMAIL),
-    )
+    assert settings.BREVO_API_KEY
+    payload: dict[str, Any] = {
+        "sender": {
+            "name": settings.EMAILS_FROM_NAME,
+            "email": settings.EMAILS_FROM_EMAIL,
+        },
+        "to": [{"email": email_to}],
+        "subject": subject,
+        "htmlContent": html_content,
+    }
     if attachment:
-        message.attach(
-            filename=attachment[0],
-            data=attachment[1],
-            content_type=attachment[2],
-        )
-    smtp_options = {"host": settings.SMTP_HOST, "port": settings.SMTP_PORT}
-    if settings.SMTP_TLS:
-        smtp_options["tls"] = True
-    elif settings.SMTP_SSL:
-        smtp_options["ssl"] = True
-    if settings.SMTP_USER:
-        smtp_options["user"] = settings.SMTP_USER
-    if settings.SMTP_PASSWORD:
-        smtp_options["password"] = settings.SMTP_PASSWORD
-    response = message.send(to=email_to, smtp=smtp_options)
-    logger.info(f"send email result: {response}")
+        filename, data, _content_type = attachment
+        payload["attachment"] = [
+            {"name": filename, "content": base64.b64encode(data).decode("ascii")}
+        ]
+    response = httpx.post(
+        BREVO_SEND_URL,
+        headers={
+            "api-key": settings.BREVO_API_KEY,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        json=payload,
+        timeout=30,
+    )
+    response.raise_for_status()
+    logger.info(f"send email result: {response.json()}")
 
 
 def generate_test_email(email_to: str) -> EmailData:

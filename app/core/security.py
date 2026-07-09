@@ -1,7 +1,11 @@
+import base64
+import hashlib
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any
 
 import jwt
+from cryptography.fernet import Fernet
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 
@@ -10,6 +14,20 @@ from app.core.config import settings
 password_hash = PasswordHash((Argon2Hasher(),))
 
 ALGORITHM = "HS256"
+
+
+@lru_cache
+def _token_cipher() -> Fernet:
+    key = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def encrypt_token(token: str) -> str:
+    return _token_cipher().encrypt(token.encode()).decode()
+
+
+def decrypt_token(token: str) -> str:
+    return _token_cipher().decrypt(token.encode()).decode()
 
 
 def create_access_token(

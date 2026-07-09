@@ -43,6 +43,8 @@ class TestPrivate:
         new_user.avatar_url = None
         new_user.created_at = None
         new_user.updated_at = None
+        new_user.google_email = None
+        new_user.google_connected = False
         mock_svc.create_user_private = AsyncMock(return_value=new_user)
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 

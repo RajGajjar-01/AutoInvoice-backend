@@ -9,6 +9,7 @@ from app.api.deps import (
     CurrentUser,
     InvoicePDFServiceDep,
     InvoiceServiceDep,
+    UserServiceDep,
     WhatsAppServiceDep,
 )
 from app.exceptions import NotFoundError
@@ -25,7 +26,7 @@ from app.schemas import (
     SendReminderRequest,
     SendWhatsAppRequest,
 )
-from app.services.email_service import send_email
+from app.services.gmail_service import send_email as send_gmail_email
 from app.services.whatsapp_service import WhatsAppService
 
 logger = logging.getLogger(__name__)
@@ -103,12 +104,15 @@ async def send_invoice_email(
     invoice_service: InvoiceServiceDep,
     pdf_service: InvoicePDFServiceDep,
     company_settings_service: CompanySettingsServiceDep,
+    user_service: UserServiceDep,
     id: uuid.UUID,
     req: SendEmailRequest,
 ) -> dict[str, str]:
     invoice = await invoice_service.get_with_customer(id, current_user.id)
     if not invoice.customer:
         raise NotFoundError("Customer not found for this invoice")
+
+    access_token = await user_service.get_valid_google_access_token(current_user)
 
     company = await company_settings_service.get_for_owner(current_user.id)
     pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
@@ -119,8 +123,10 @@ async def send_invoice_email(
 Due Date: {invoice.due_date or 'N/A'}</p>
 <p>Thank you for your business!</p>"""
 
-    send_email(
-        email_to=req.to_email,
+    send_gmail_email(
+        access_token=access_token,
+        from_email=current_user.google_email or current_user.email,
+        to_email=req.to_email,
         subject=subject,
         html_content=html_content,
         attachment=(

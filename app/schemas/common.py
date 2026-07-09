@@ -31,3 +31,12 @@ class PaginatedResponse(SQLModel, Generic[T]):
     page: int
     page_size: int
     total_pages: int
+
+
+class GoogleAuthUrl(SQLModel):
+    url: str
+
+
+class GoogleStatus(SQLModel):
+    connected: bool
+    email: str | None = None

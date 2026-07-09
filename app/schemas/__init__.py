@@ -1,4 +1,6 @@
 from app.schemas.common import (
+    GoogleAuthUrl,
+    GoogleStatus,
     Message,
     NewPassword,
     PaginatedResponse,
@@ -70,6 +72,7 @@ from app.schemas.user import (
 )
 
 __all__ = [
+    "GoogleAuthUrl", "GoogleStatus",
     "Message", "NewPassword", "PaginatedResponse", "Token", "TokenPayload",
     "UpdatePassword", "UserCreate", "UserPublic", "UserRegister", "UserUpdate",
     "UserUpdateMe", "UsersPublic",

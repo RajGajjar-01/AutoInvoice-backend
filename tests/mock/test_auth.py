@@ -21,6 +21,8 @@ def _mock_user(overrides=None):
     u.avatar_url = None
     u.created_at = MagicMock()
     u.updated_at = MagicMock()
+    u.google_email = None
+    u.google_connected = False
     if overrides:
         for k, v in overrides.items():
             setattr(u, k, v)
