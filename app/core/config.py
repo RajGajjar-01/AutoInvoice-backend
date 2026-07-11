@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = ""
 
+    REDIS_SERVER: str = "localhost"
+    REDIS_PORT: int = 6379
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self.REDIS_SERVER}:{self.REDIS_PORT}/0"
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def ASYNC_SQLALCHEMY_DATABASE_URI(self) -> str:
@@ -114,6 +122,7 @@ class Settings(BaseSettings):
     OPENWA_SESSION_ID: str = ""
 
     EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 48
+    EMAIL_VERIFICATION_CODE_EXPIRE_MINUTES: int = 10
 
     @computed_field  # type: ignore[prop-decorator]
     @property

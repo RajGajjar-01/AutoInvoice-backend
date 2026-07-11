@@ -1,13 +1,19 @@
+import asyncio
 import logging
+from collections.abc import Coroutine
+from typing import Any
 
 import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
+from sqlalchemy import text
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
+from app.core.db import async_engine
+from app.core.redis import redis_client
 from app.exceptions import (
     AuthError,
     ConflictError,
@@ -99,10 +105,37 @@ if settings.all_cors_origins:
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
+async def _check_postgres() -> None:
+    async with async_engine.connect() as conn:
+        await conn.execute(text("SELECT 1"))
+
+
+async def _check_redis() -> None:
+    await redis_client.ping()
+
+
+async def _probe(name: str, check: Coroutine[Any, Any, None]) -> tuple[str, str]:
+    try:
+        await asyncio.wait_for(check, timeout=3)
+        return name, "ok"
+    except Exception as exc:
+        logger.warning("Health check: %s unreachable: %s", name, exc)
+        return name, "unreachable"
+
+
 @app.get("/health")
-async def health() -> dict[str, str]:
-    """Health check endpoint for Railway and Docker."""
-    return {"status": "healthy"}
+async def health() -> JSONResponse:
+    """Health check endpoint for Railway and Docker - verifies DB and Redis connectivity."""
+    results = await asyncio.gather(
+        _probe("postgres", _check_postgres()),
+        _probe("redis", _check_redis()),
+    )
+    checks = dict(results)
+    healthy = all(status == "ok" for status in checks.values())
+    return JSONResponse(
+        status_code=200 if healthy else 503,
+        content={"status": "healthy" if healthy else "unhealthy", "checks": checks},
+    )
 
 
 # ⚠️  TEMPORARY — remove after verifying Sentry is working

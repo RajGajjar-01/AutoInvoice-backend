@@ -60,6 +60,9 @@ class UserService:
             await self.repo.update(db_user, {"hashed_password": updated_hash})
         return db_user
 
+    async def verify_email(self, db_user: User) -> User:
+        return await self.repo.update(db_user, {"is_verified": True})
+
     async def update_password(self, db_user: User, new_password: str) -> User:
         _validate_password(new_password)
         return await self.repo.update(

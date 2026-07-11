@@ -1,0 +1,10 @@
+<!--
+  NOTE: These templates are now maintained as hand-crafted HTML in the build/ directory.
+  The HTML uses Python's string.Template ($variable) substitution via email_service.py.
+  MJML sources below are kept for reference only.
+-->
+
+<!-- new_account: variables: $project_name, $username, $password (optional), $link -->
+<!-- reset_password: variables: $project_name, $username, $email, $valid_hours, $link -->
+<!-- verify_email: variables: $project_name, $username, $email, $valid_minutes, $code -->
+<!-- test_email: variables: $project_name, $email -->

@@ -25,6 +25,10 @@ class NewPassword(SQLModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class VerifyEmailRequest(SQLModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
 class PaginatedResponse(SQLModel, Generic[T]):
     data: list[T]
     total: int

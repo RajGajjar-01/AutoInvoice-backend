@@ -17,10 +17,13 @@ from app.schemas import (
     UserPublic,
     UserRegister,
     UserUpdateMe,
+    VerifyEmailRequest,
 )
+from app.services import verification_service
 from app.services.email_service import (
     generate_password_reset_token,
     generate_reset_password_email,
+    generate_verify_email,
     send_email,
     verify_password_reset_token,
 )
@@ -66,6 +69,16 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 @router.post("/signup", response_model=AuthResponse, status_code=201)
 async def signup(response: Response, user_in: UserRegister, user_service: UserServiceDep) -> AuthResponse:
     user = await user_service.signup(user_in)
+    if settings.emails_enabled:
+        code = await verification_service.issue_code(user.id)
+        email_data = generate_verify_email(
+            email_to=user.email, username=user.full_name or user.email, code=code
+        )
+        send_email(
+            email_to=user.email,
+            subject=email_data.subject,
+            html_content=email_data.html_content,
+        )
     access_token = security.create_access_token(subject=user.id)
     refresh_token = security.create_refresh_token(subject=user.id)
     _set_auth_cookies(response, access_token, refresh_token)
@@ -153,6 +166,35 @@ async def update_current_user(
 ) -> Any:
     user = await user_service.update_me(current_user, user_in)
     return UserPublic.model_validate(user)
+
+
+@router.post("/verify-email", response_model=Message)
+async def verify_email(
+    current_user: CurrentUser, body: VerifyEmailRequest, user_service: UserServiceDep
+) -> Message:
+    if current_user.is_verified:
+        return Message(message="Email already verified")
+    await verification_service.verify_code(current_user.id, body.code)
+    await user_service.verify_email(current_user)
+    return Message(message="Email verified successfully")
+
+
+@router.post("/resend-verification-email", response_model=Message)
+async def resend_verification_email(current_user: CurrentUser) -> Message:
+    if current_user.is_verified:
+        return Message(message="Email already verified")
+    code = await verification_service.request_resend(current_user.id)
+    email_data = generate_verify_email(
+        email_to=current_user.email,
+        username=current_user.full_name or current_user.email,
+        code=code,
+    )
+    send_email(
+        email_to=current_user.email,
+        subject=email_data.subject,
+        html_content=email_data.html_content,
+    )
+    return Message(message="Verification code resent")
 
 
 @router.post("/forgot-password", response_model=Message)

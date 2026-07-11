@@ -6,6 +6,7 @@ from app.schemas.common import (
     PaginatedResponse,
     Token,
     TokenPayload,
+    VerifyEmailRequest,
 )
 from app.schemas.company_settings import (
     CompanySettingsCreate,
@@ -74,6 +75,7 @@ from app.schemas.user import (
 __all__ = [
     "GoogleAuthUrl", "GoogleStatus",
     "Message", "NewPassword", "PaginatedResponse", "Token", "TokenPayload",
+    "VerifyEmailRequest",
     "UpdatePassword", "UserCreate", "UserPublic", "UserRegister", "UserUpdate",
     "UserUpdateMe", "UsersPublic",
     "ItemCreate", "ItemPublic", "ItemsPublic", "ItemUpdate",
