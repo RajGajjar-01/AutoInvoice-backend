@@ -5,7 +5,7 @@ from pydantic import EmailStr
 from sqlmodel import SQLModel
 
 from app.api.deps import SuperUserDep, UserServiceDep
-from app.schemas import Message, PaginatedResponse, UserPublic
+from app.schemas import PaginatedResponse, UserPublic
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

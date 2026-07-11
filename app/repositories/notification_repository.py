@@ -1,7 +1,8 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import delete as sa_delete, update as sa_update
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import update as sa_update
 from sqlmodel import col, func, select
 
 from app.models import Notification

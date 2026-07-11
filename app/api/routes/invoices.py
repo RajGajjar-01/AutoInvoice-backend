@@ -2,7 +2,7 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Query
 
 from app.api.deps import (
     CompanySettingsServiceDep,
@@ -105,6 +105,7 @@ async def send_invoice_email(
     pdf_service: InvoicePDFServiceDep,
     company_settings_service: CompanySettingsServiceDep,
     user_service: UserServiceDep,
+    background_tasks: BackgroundTasks,
     id: uuid.UUID,
     req: SendEmailRequest,
 ) -> dict[str, str]:
@@ -123,7 +124,8 @@ async def send_invoice_email(
 Due Date: {invoice.due_date or 'N/A'}</p>
 <p>Thank you for your business!</p>"""
 
-    send_gmail_email(
+    background_tasks.add_task(
+        send_gmail_email,
         access_token=access_token,
         from_email=current_user.google_email or current_user.email,
         to_email=req.to_email,

@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from app.api.deps import CurrentUser, SuperUserDep, UserServiceDep
-from app.schemas import Message, UserPublic, UsersPublic, UserUpdate, UserUpdateMe
+from app.schemas import UserPublic, UsersPublic, UserUpdate, UserUpdateMe
 
 router = APIRouter(prefix="/users", tags=["users"])
 

@@ -9,6 +9,12 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+@pytest.fixture(scope="session", autouse=True)
+def db() -> None:
+    """Override the parent conftest's db fixture to avoid DB dependency."""
+    return None
+
+
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
     with TestClient(app) as c:

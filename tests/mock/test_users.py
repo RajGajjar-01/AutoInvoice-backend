@@ -1,7 +1,6 @@
 import uuid
 from unittest.mock import AsyncMock
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.api import deps

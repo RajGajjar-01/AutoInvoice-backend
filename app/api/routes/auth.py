@@ -1,13 +1,14 @@
 from typing import Annotated, Any
 
 import jwt
-from fastapi import APIRouter, Cookie, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Request, Response
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import SQLModel
 
 from app.api.deps import CurrentUser, SessionDep, UserServiceDep
 from app.core import security
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.models import User
 from app.schemas import (
     Message,
@@ -67,14 +68,17 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 
 
 @router.post("/signup", response_model=AuthResponse, status_code=201)
-async def signup(response: Response, user_in: UserRegister, user_service: UserServiceDep) -> AuthResponse:
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def signup(request: Request, response: Response, user_in: UserRegister, user_service: UserServiceDep, background_tasks: BackgroundTasks) -> AuthResponse:
+    _ = request
     user = await user_service.signup(user_in)
     if settings.emails_enabled:
         code = await verification_service.issue_code(user.id)
         email_data = generate_verify_email(
             email_to=user.email, username=user.full_name or user.email, code=code
         )
-        send_email(
+        background_tasks.add_task(
+            send_email,
             email_to=user.email,
             subject=email_data.subject,
             html_content=email_data.html_content,
@@ -91,7 +95,9 @@ async def signup(response: Response, user_in: UserRegister, user_service: UserSe
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(response: Response, body: LoginRequest, user_service: UserServiceDep) -> AuthResponse:
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def login(request: Request, response: Response, body: LoginRequest, user_service: UserServiceDep) -> AuthResponse:
+    _ = request
     user = await user_service.authenticate(body.email, body.password)
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect email or password")
@@ -107,11 +113,14 @@ async def login(response: Response, body: LoginRequest, user_service: UserServic
 
 
 @router.post("/refresh", response_model=Token)
+@limiter.limit(settings.RATE_LIMIT_AUTH)
 async def refresh_token(
+    request: Request,
     response: Response,
     session: SessionDep,
     refresh_token: Annotated[str | None, Cookie()] = None,
 ) -> Token:
+    _ = request
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token not found")
 
@@ -180,7 +189,9 @@ async def verify_email(
 
 
 @router.post("/resend-verification-email", response_model=Message)
-async def resend_verification_email(current_user: CurrentUser) -> Message:
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def resend_verification_email(request: Request, current_user: CurrentUser, background_tasks: BackgroundTasks) -> Message:
+    _ = request
     if current_user.is_verified:
         return Message(message="Email already verified")
     code = await verification_service.request_resend(current_user.id)
@@ -189,7 +200,8 @@ async def resend_verification_email(current_user: CurrentUser) -> Message:
         username=current_user.full_name or current_user.email,
         code=code,
     )
-    send_email(
+    background_tasks.add_task(
+        send_email,
         email_to=current_user.email,
         subject=email_data.subject,
         html_content=email_data.html_content,
@@ -198,14 +210,17 @@ async def resend_verification_email(current_user: CurrentUser) -> Message:
 
 
 @router.post("/forgot-password", response_model=Message)
-async def forgot_password(email: str, user_service: UserServiceDep) -> Message:
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def forgot_password(request: Request, email: str, user_service: UserServiceDep, background_tasks: BackgroundTasks) -> Message:
+    _ = request
     user = await user_service.get_by_email(email)
     if user:
         password_reset_token = generate_password_reset_token(email=email)
         email_data = generate_reset_password_email(
             email_to=user.email, email=email, token=password_reset_token
         )
-        send_email(
+        background_tasks.add_task(
+            send_email,
             email_to=user.email,
             subject=email_data.subject,
             html_content=email_data.html_content,
@@ -216,7 +231,9 @@ async def forgot_password(email: str, user_service: UserServiceDep) -> Message:
 
 
 @router.post("/reset-password", response_model=Message)
-async def reset_password(body: NewPassword, user_service: UserServiceDep) -> Message:
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+async def reset_password(request: Request, body: NewPassword, user_service: UserServiceDep) -> Message:
+    _ = request
     email = verify_password_reset_token(token=body.token)
     if not email:
         raise HTTPException(status_code=400, detail="Invalid token")

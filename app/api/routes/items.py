@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, ItemServiceDep
-from app.schemas import ItemCreate, ItemPublic, ItemsPublic, ItemUpdate, Message
+from app.schemas import ItemCreate, ItemPublic, ItemsPublic, ItemUpdate
 
 router = APIRouter(prefix="/items", tags=["items"])
 

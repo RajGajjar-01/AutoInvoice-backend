@@ -5,14 +5,17 @@ from typing import Any
 
 import sentry_sdk
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
 from app.core.db import async_engine
+from app.core.rate_limit import limiter
 from app.core.redis import redis_client
 from app.exceptions import (
     AuthError,
@@ -21,6 +24,7 @@ from app.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.middleware.security_headers import SecurityHeadersMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +49,26 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
 )
+
+
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+
+@app.exception_handler(RateLimitExceeded)
+def rate_limit_exceeded_handler(
+    request: Request, exc: RateLimitExceeded
+) -> Response:
+    response = JSONResponse(
+        status_code=429,
+        content={
+            "detail": str(exc.detail),
+            "code": "rate_limit_exceeded",
+        },
+    )
+    return app.state.limiter._inject_headers(  # type: ignore[no-any-return]
+        response, request.state.view_rate_limit
+    )
 
 
 @app.exception_handler(AuthError)
@@ -102,6 +126,8 @@ if settings.all_cors_origins:
         max_age=86400,
     )
 
+app.add_middleware(SecurityHeadersMiddleware)
+
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
@@ -124,7 +150,9 @@ async def _probe(name: str, check: Coroutine[Any, Any, None]) -> tuple[str, str]
 
 
 @app.get("/health")
-async def health() -> JSONResponse:
+@limiter.exempt  # type: ignore[untyped-decorator]
+async def health(request: Request) -> JSONResponse:
+    _ = request
     """Health check endpoint for Railway and Docker - verifies DB and Redis connectivity."""
     results = await asyncio.gather(
         _probe("postgres", _check_postgres()),

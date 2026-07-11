@@ -1,4 +1,3 @@
-import warnings
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -116,6 +115,9 @@ class Settings(BaseSettings):
     @property
     def google_oauth_enabled(self) -> bool:
         return bool(self.GOOGLE_CLIENT_ID and self.GOOGLE_CLIENT_SECRET)
+
+    RATE_LIMIT_GLOBAL: str = "200/minute"
+    RATE_LIMIT_AUTH: str = "10/minute"
 
     OPENWA_BASE_URL: str = "http://localhost:2785"
     OPENWA_API_KEY: str = ""
