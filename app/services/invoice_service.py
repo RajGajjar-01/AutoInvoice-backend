@@ -3,14 +3,18 @@ from typing import Any
 
 from app.core.time import get_datetime_utc
 from app.exceptions import ForbiddenError, NotFoundError
-from app.models import Invoice
+from app.models import Customer, Invoice
+from app.repositories.customer_repository import CustomerRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.schemas import InvoiceCreate, InvoiceUpdate
 
 
 class InvoiceService:
-    def __init__(self, repo: InvoiceRepository) -> None:
+    def __init__(
+        self, repo: InvoiceRepository, customer_repo: CustomerRepository
+    ) -> None:
         self.repo = repo
+        self.customer_repo = customer_repo
 
     async def get_owned(self, invoice_id: uuid.UUID, owner_id: uuid.UUID) -> Invoice:
         invoice = await self.repo.get(invoice_id)
@@ -53,6 +57,12 @@ class InvoiceService:
         return await self.repo.get_dashboard_stats(owner_id, document_type)
 
     async def create(self, invoice_in: InvoiceCreate, owner_id: uuid.UUID) -> Invoice:
+        customer = await self.customer_repo.get(invoice_in.customer_id)
+        if not customer:
+            raise NotFoundError("Customer not found")
+        if customer.owner_id != owner_id:
+            raise ForbiddenError("Not enough permissions")
+
         invoice_data = invoice_in.model_dump()
         invoice_data["items"] = [
             item.model_dump() if hasattr(item, "model_dump") else item

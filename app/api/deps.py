@@ -220,8 +220,9 @@ def get_invoice_repository(session: SessionDep) -> InvoiceRepository:
 
 def get_invoice_service(
     repo: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+    customer_repo: Annotated[CustomerRepository, Depends(get_customer_repository)],
 ) -> InvoiceService:
-    return InvoiceService(repo)
+    return InvoiceService(repo, customer_repo)
 
 
 InvoiceServiceDep = Annotated[InvoiceService, Depends(get_invoice_service)]
