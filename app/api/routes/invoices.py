@@ -27,6 +27,7 @@ from app.schemas import (
     SendWhatsAppRequest,
 )
 from app.services.gmail_service import send_email as send_gmail_email
+from app.services.invoice_pdf_service import document_title_for
 from app.services.whatsapp_service import WhatsAppService
 
 logger = logging.getLogger(__name__)
@@ -117,9 +118,13 @@ async def send_invoice_email(
 
     company = await company_settings_service.get_for_owner(current_user.id)
     pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
-    subject = req.subject or f"Invoice {invoice.invoice_number} from {company.name}"
+
+    dt = invoice.document_type.value if hasattr(invoice.document_type, "value") else invoice.document_type
+    doc_label = document_title_for(dt)
+
+    subject = req.subject or f"{doc_label} {invoice.invoice_number} from {company.name}"
     html_content = f"""<p>Dear {invoice.customer.name},</p>
-<p>Please find your invoice <strong>{invoice.invoice_number}</strong> attached.</p>
+<p>Please find your {doc_label.lower()} <strong>{invoice.invoice_number}</strong> attached.</p>
 <p>Amount: {invoice.currency} {invoice.grand_total:,.2f}<br>
 Due Date: {invoice.due_date or 'N/A'}</p>
 <p>Thank you for your business!</p>"""
@@ -132,7 +137,7 @@ Due Date: {invoice.due_date or 'N/A'}</p>
         subject=subject,
         html_content=html_content,
         attachment=(
-            f"invoice_{invoice.invoice_number}.pdf",
+            f"{doc_label.lower().replace(' ', '_')}_{invoice.invoice_number}.pdf",
             pdf_bytes,
             "application/pdf",
         ),
@@ -158,6 +163,9 @@ async def send_invoice_whatsapp(
     company = await company_settings_service.get_for_owner(current_user.id)
     pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
 
+    dt = invoice.document_type.value if hasattr(invoice.document_type, "value") else invoice.document_type
+    doc_label = document_title_for(dt)
+
     wa_svc = whatsapp_service
     if company.whatsapp_enabled and company.openwa_api_key and company.openwa_session_id:
         wa_svc = WhatsAppService(
@@ -170,11 +178,10 @@ async def send_invoice_whatsapp(
     result = wa_svc.send_document(
         chat_id=chat_id,
         pdf_bytes=pdf_bytes,
-        filename=f"invoice_{invoice.invoice_number}.pdf",
-        caption=f"Invoice {invoice.invoice_number} - {invoice.currency} {invoice.grand_total:,.2f}",
+        filename=f"{doc_label.lower().replace(' ', '_')}_{invoice.invoice_number}.pdf",
+        caption=f"{doc_label} {invoice.invoice_number} - {invoice.currency} {invoice.grand_total:,.2f}",
     )
     return {"message": "WhatsApp message sent", "message_id": result.get("messageId")}
-
 
 @router.post("/{id}/send-reminder", status_code=200)
 async def send_invoice_reminder(
@@ -194,6 +201,9 @@ async def send_invoice_reminder(
     company = await company_settings_service.get_for_owner(current_user.id)
     pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
 
+    dt = invoice.document_type.value if hasattr(invoice.document_type, "value") else invoice.document_type
+    doc_label = document_title_for(dt)
+
     wa_svc = whatsapp_service
     if company.whatsapp_enabled and company.openwa_api_key and company.openwa_session_id:
         wa_svc = WhatsAppService(
@@ -204,7 +214,7 @@ async def send_invoice_reminder(
 
     chat_id = f"{req.to_phone.lstrip('+')}@c.us"
 
-    caption = f"Reminder: Invoice {invoice.invoice_number} is due. "
+    caption = f"Reminder: {doc_label} {invoice.invoice_number} is due. "
     if req.days_overdue:
         caption += f"({req.days_overdue} days overdue) "
     caption += f"Amount: {invoice.currency} {invoice.grand_total:,.2f}"
@@ -212,7 +222,7 @@ async def send_invoice_reminder(
     result = whatsapp_service.send_document(
         chat_id=chat_id,
         pdf_bytes=pdf_bytes,
-        filename=f"invoice_{invoice.invoice_number}.pdf",
+        filename=f"{doc_label.lower().replace(' ', '_')}_{invoice.invoice_number}.pdf",
         caption=caption,
     )
     return {"message": "Reminder sent", "message_id": result.get("messageId")}

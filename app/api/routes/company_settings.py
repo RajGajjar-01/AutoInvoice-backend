@@ -16,7 +16,8 @@ router = APIRouter(prefix="/company-settings", tags=["company-settings"])
 async def get_company_settings(
     current_user: CurrentUser, company_settings_service: CompanySettingsServiceDep
 ) -> Any:
-    return await company_settings_service.get_for_owner(current_user.id)
+    settings = await company_settings_service.get_for_owner(current_user.id)
+    return CompanySettingsPublic.from_model(settings)
 
 
 @router.post("/", response_model=CompanySettingsPublic, status_code=201)
@@ -26,7 +27,8 @@ async def create_company_settings(
     company_settings_service: CompanySettingsServiceDep,
     settings_in: CompanySettingsCreate,
 ) -> Any:
-    return await company_settings_service.create(settings_in, current_user.id)
+    settings = await company_settings_service.create(settings_in, current_user.id)
+    return CompanySettingsPublic.from_model(settings)
 
 
 @router.put("/", response_model=CompanySettingsPublic)
@@ -36,7 +38,8 @@ async def update_company_settings(
     company_settings_service: CompanySettingsServiceDep,
     settings_in: CompanySettingsUpdate,
 ) -> Any:
-    return await company_settings_service.upsert(current_user.id, settings_in)
+    settings = await company_settings_service.upsert(current_user.id, settings_in)
+    return CompanySettingsPublic.from_model(settings)
 
 
 @router.delete("/", status_code=204)

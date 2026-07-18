@@ -89,3 +89,21 @@ class CompanySettingsPublic(CompanySettingsBase):
     owner_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+    # Never expose secrets in responses.
+    smtp_password: str | None = Field(default=None, exclude=True)
+    openwa_api_key: str | None = Field(default=None, exclude=True)
+    openwa_session_id: str | None = Field(default=None, exclude=True)
+
+    # Expose only whether each credential is configured.
+    smtp_password_set: bool = False
+    openwa_api_key_set: bool = False
+    openwa_session_id_set: bool = False
+
+    @classmethod
+    def from_model(cls, m) -> "CompanySettingsPublic":
+        obj = cls.model_validate(m)
+        obj.smtp_password_set = bool(getattr(m, "smtp_password", None))
+        obj.openwa_api_key_set = bool(getattr(m, "openwa_api_key", None))
+        obj.openwa_session_id_set = bool(getattr(m, "openwa_session_id", None))
+        return obj

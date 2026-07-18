@@ -21,26 +21,51 @@ def _format_currency(value: float, currency: str = "INR") -> str:
 
 _jinja_env.globals["format_currency"] = _format_currency
 
+_DOCUMENT_TITLES = {
+    "invoice": "Invoice",
+    "quotation": "Quotation",
+    "challan": "Delivery Challan",
+    "proforma": "Proforma Invoice",
+}
+
+
+def document_title_for(document_type: str) -> str:
+    return _DOCUMENT_TITLES.get(document_type, "Invoice")
+
 
 class InvoicePDFService:
+    def render_html(
+        self,
+        invoice: Invoice,
+        customer: Customer,
+        company: CompanySettings,
+    ) -> str:
+        template = _jinja_env.get_template("invoice_pdf.html")
+
+        document_type = (
+            invoice.document_type.value
+            if hasattr(invoice.document_type, "value")
+            else invoice.document_type
+        )
+
+        return template.render(
+            invoice=invoice,
+            customer=customer,
+            company=company,
+            items=invoice.items,
+            currency=invoice.currency or "INR",
+            document_type=document_type,
+            document_title=_DOCUMENT_TITLES.get(document_type, "Invoice"),
+            hide_pricing=document_type == "challan",
+        )
+
     def generate(
         self,
         invoice: Invoice,
         customer: Customer,
         company: CompanySettings,
     ) -> bytes:
-        template = _jinja_env.get_template("invoice_pdf.html")
-
-        html = template.render(
-            invoice=invoice,
-            customer=customer,
-            company=company,
-            items=invoice.items,
-            currency=invoice.currency or "INR",
-            document_type=invoice.document_type.value
-            if hasattr(invoice.document_type, "value")
-            else invoice.document_type,
-        )
+        html = self.render_html(invoice, customer, company)
 
         import weasyprint
 

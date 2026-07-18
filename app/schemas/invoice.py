@@ -50,6 +50,8 @@ class InvoiceBase(SQLModel):
     status: InvoiceStatus = InvoiceStatus.unpaid
     place_of_supply: str | None = Field(default=None, max_length=100)
     reverse_charge: bool = False
+    vehicle_info: str | None = Field(default=None, max_length=200)
+    delivery_notes: str | None = Field(default=None, max_length=1000)
 
 
 class InvoiceCreate(InvoiceBase):
@@ -73,6 +75,8 @@ class InvoiceUpdate(SQLModel):
     status: InvoiceStatus | None = None
     place_of_supply: str | None = Field(default=None, max_length=100)
     reverse_charge: bool | None = None
+    vehicle_info: str | None = Field(default=None, max_length=200)
+    delivery_notes: str | None = Field(default=None, max_length=1000)
     customer_id: uuid.UUID | None = None
     items: list[InvoiceItemData] | None = None
 

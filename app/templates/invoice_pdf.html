@@ -53,10 +53,13 @@
     {% if company.gstin %}<p>GSTIN: {{ company.gstin }}</p>{% endif %}
   </div>
   <div class="invoice-title">
-    <h2>{{ document_type | upper }}</h2>
-    <p><strong>INV-{{ invoice.invoice_number }}</strong></p>
+    <h2>{{ document_title }}</h2>
+    <p><strong>{{ invoice.invoice_number }}</strong></p>
     <p>Date: {{ invoice.invoice_date }}</p>
-    {% if invoice.due_date %}<p>Due Date: {{ invoice.due_date }}</p>{% endif %}
+    {% if invoice.due_date and not hide_pricing %}<p>Due Date: {{ invoice.due_date }}</p>{% endif %}
+    {% if invoice.valid_until %}<p>Valid Until: {{ invoice.valid_until }}</p>{% endif %}
+    {% if invoice.place_of_supply %}<p>Place of Supply: {{ invoice.place_of_supply }}</p>{% endif %}
+    {% if invoice.reverse_charge %}<p>Reverse Charge: Applicable</p>{% endif %}
     <p>Status: {{ invoice.status | upper }}</p>
   </div>
 </div>
@@ -91,9 +94,11 @@
       <th>#</th>
       <th>Description</th>
       <th class="text-center">Qty</th>
+      {% if not hide_pricing %}
       <th class="text-right">Rate</th>
       <th class="text-right">Tax</th>
       <th class="text-right">Amount</th>
+      {% endif %}
     </tr>
   </thead>
   <tbody>
@@ -102,14 +107,17 @@
       <td>{{ loop.index }}</td>
       <td>{{ item.name }}{% if item.description %}<br><small>{{ item.description }}</small>{% endif %}</td>
       <td class="text-center">{{ item.quantity }} {% if item.unit %}{{ item.unit }}{% endif %}</td>
+      {% if not hide_pricing %}
       <td class="text-right">{{ format_currency(item.price, currency) }}</td>
       <td class="text-right">{{ item.tax }}%</td>
       <td class="text-right">{{ format_currency(item.quantity * item.price * (1 + item.tax / 100), currency) }}</td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>
 </table>
 
+{% if not hide_pricing %}
 <table class="totals">
   <tr>
     <td>Subtotal</td>
@@ -130,6 +138,16 @@
     <td class="text-right">{{ format_currency(invoice.grand_total, currency) }}</td>
   </tr>
 </table>
+{% endif %}
+
+{% if hide_pricing and (invoice.vehicle_info or invoice.delivery_notes or invoice.place_of_supply) %}
+<div class="notes">
+  <h3>Delivery Details</h3>
+  {% if invoice.vehicle_info %}<p><strong>Vehicle / Transport:</strong> {{ invoice.vehicle_info }}</p>{% endif %}
+  {% if invoice.delivery_notes %}<p><strong>Delivery Notes:</strong> {{ invoice.delivery_notes }}</p>{% endif %}
+  {% if invoice.place_of_supply %}<p><strong>Place of Supply:</strong> {{ invoice.place_of_supply }}</p>{% endif %}
+</div>
+{% endif %}
 
 {% if invoice.notes %}
 <div class="notes">

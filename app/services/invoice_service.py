@@ -8,6 +8,8 @@ from app.repositories.customer_repository import CustomerRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.schemas import InvoiceCreate, InvoiceUpdate
 
+from .invoice_totals import compute_totals
+
 
 class InvoiceService:
     def __init__(
@@ -68,6 +70,15 @@ class InvoiceService:
             item.model_dump() if hasattr(item, "model_dump") else item
             for item in invoice_in.items
         ]
+
+        hide_pricing = invoice_data.get("document_type") == "challan"
+        totals = compute_totals(
+            invoice_data["items"],
+            discount=invoice_data.get("discount", 0) or 0,
+            hide_pricing=hide_pricing,
+        )
+        invoice_data.update(totals)
+
         return await self.repo.create(invoice_data, owner_id)
 
     async def update(
@@ -81,6 +92,14 @@ class InvoiceService:
                 item.model_dump() if hasattr(item, "model_dump") else item
                 for item in update_data["items"]
             ]
+
+            hide_pricing = update_data.get("document_type", invoice.document_type) == "challan"
+            totals = compute_totals(
+                update_data["items"],
+                discount=update_data.get("discount", invoice.discount or 0) or 0,
+                hide_pricing=hide_pricing,
+            )
+            update_data.update(totals)
 
         update_data["updated_at"] = get_datetime_utc()
         return await self.repo.update(invoice, update_data)
