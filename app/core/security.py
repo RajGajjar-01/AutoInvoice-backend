@@ -61,14 +61,16 @@ def _get_all_master_keys() -> list[bytes]:
     return keys
 
 
-def derive_tenant_key(owner_id: uuid.UUID | str, master_key: bytes | None = None) -> bytes:
+def derive_tenant_key(
+    owner_id: uuid.UUID | str, master_key: bytes | None = None
+) -> bytes:
     if master_key is None:
         master_key = _get_master_encryption_key()
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
-        info=f"tenant:{owner_id}".encode("utf-8"),
+        info=f"tenant:{owner_id}".encode(),
     )
     return hkdf.derive(master_key)
 

@@ -2,6 +2,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, InvoiceTemplateServiceDep
 from app.schemas import (
@@ -82,9 +83,6 @@ async def delete_invoice_template(
     id: uuid.UUID,
 ) -> None:
     await invoice_template_service.delete(id, current_user.id)
-
-
-from pydantic import BaseModel
 
 
 class ExcelParseResponse(BaseModel):

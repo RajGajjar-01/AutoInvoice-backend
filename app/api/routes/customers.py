@@ -16,9 +16,14 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 
 @router.get("/", response_model=CustomersPublic)
 async def read_customers(
-    current_user: CurrentUser, customer_service: CustomerServiceDep, skip: int = 0, limit: int = 100
+    current_user: CurrentUser,
+    customer_service: CustomerServiceDep,
+    skip: int = 0,
+    limit: int = 100,
 ) -> Any:
-    customers, count = await customer_service.list_items(current_user.id, skip=skip, limit=limit)
+    customers, count = await customer_service.list_items(
+        current_user.id, skip=skip, limit=limit
+    )
     return CustomersPublic(data=customers, count=count)
 
 
@@ -31,7 +36,10 @@ async def read_customer(
 
 @router.post("/", response_model=CustomerPublic, status_code=201)
 async def create_customer(
-    *, current_user: CurrentUser, customer_service: CustomerServiceDep, customer_in: CustomerCreate
+    *,
+    current_user: CurrentUser,
+    customer_service: CustomerServiceDep,
+    customer_in: CustomerCreate,
 ) -> Any:
     return await customer_service.create(customer_in, current_user.id)
 

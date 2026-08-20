@@ -22,7 +22,9 @@ def user_authentication_headers(
 def create_random_user(db: Session) -> User:
     email = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=email, password=password, full_name=random_lower_string())
+    user_in = UserCreate(
+        email=email, password=password, full_name=random_lower_string()
+    )
     db_obj = User.model_validate(
         user_in, update={"hashed_password": get_password_hash(user_in.password)}
     )
@@ -37,7 +39,9 @@ def authentication_token_from_email(
 ) -> dict[str, str]:
     user = db.exec(select(User).where(User.email == email)).first()
     if not user:
-        user_in = UserCreate(email=email, password=password, full_name=random_lower_string())
+        user_in = UserCreate(
+            email=email, password=password, full_name=random_lower_string()
+        )
         db_obj = User.model_validate(
             user_in, update={"hashed_password": get_password_hash(user_in.password)}
         )

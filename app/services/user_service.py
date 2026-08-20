@@ -132,7 +132,10 @@ class UserService:
             raise ConflictError("A user with this email already exists")
         _validate_password(password)
         user_create = UserCreate(
-            email=email, password=password, full_name=full_name, is_superuser=is_superuser
+            email=email,
+            password=password,
+            full_name=full_name,
+            is_superuser=is_superuser,
         )
         return await self.repo.create(user_create, get_password_hash(password))
 
@@ -180,7 +183,8 @@ class UserService:
         update_data: dict[str, Any] = {
             "google_email": email,
             "google_access_token": encrypt_token(access_token),
-            "google_token_expires_at": get_datetime_utc() + timedelta(seconds=expires_in),
+            "google_token_expires_at": get_datetime_utc()
+            + timedelta(seconds=expires_in),
         }
         if refresh_token:
             update_data["google_refresh_token"] = encrypt_token(refresh_token)
@@ -199,7 +203,9 @@ class UserService:
         ):
             return decrypt_token(user.google_access_token)
 
-        tokens = google_oauth_service.refresh_access_token(decrypt_token(user.google_refresh_token))
+        tokens = google_oauth_service.refresh_access_token(
+            decrypt_token(user.google_refresh_token)
+        )
         access_token: str = tokens["access_token"]
         await self.repo.update(
             user,
@@ -232,7 +238,10 @@ class UserService:
         is_verified: bool,
     ) -> User:
         user_create = UserCreate(
-            email=email, password=password, full_name=full_name, is_superuser=is_superuser
+            email=email,
+            password=password,
+            full_name=full_name,
+            is_superuser=is_superuser,
         )
         user = await self.repo.create(user_create, get_password_hash(password))
         if is_verified:

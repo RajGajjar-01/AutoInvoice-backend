@@ -11,7 +11,9 @@ from app.schemas import ItemCreate
 class ItemRepository(BaseRepository[Item]):
     model = Item
 
-    async def get_by_id_and_owner(self, item_id: uuid.UUID, owner_id: uuid.UUID) -> Item | None:
+    async def get_by_id_and_owner(
+        self, item_id: uuid.UUID, owner_id: uuid.UUID
+    ) -> Item | None:
         statement = select(Item).where(Item.id == item_id, Item.owner_id == owner_id)
         result = await self.session.exec(statement)
         return result.first()

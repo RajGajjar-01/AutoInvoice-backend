@@ -7,7 +7,9 @@ from app.models import User
 from app.schemas import UserCreate
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
-async_engine: AsyncEngine = create_async_engine(str(settings.ASYNC_SQLALCHEMY_DATABASE_URI))
+async_engine: AsyncEngine = create_async_engine(
+    str(settings.ASYNC_SQLALCHEMY_DATABASE_URI)
+)
 
 
 def init_db(session: Session) -> None:

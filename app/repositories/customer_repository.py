@@ -15,7 +15,9 @@ class CustomerRepository(BaseRepository[Customer]):
         self, owner_id: uuid.UUID, *, skip: int, limit: int
     ) -> tuple[list[Customer], int]:
         count_statement = (
-            select(func.count()).select_from(Customer).where(Customer.owner_id == owner_id)
+            select(func.count())
+            .select_from(Customer)
+            .where(Customer.owner_id == owner_id)
         )
         count_result = await self.session.exec(count_statement)
         count = count_result.one()
@@ -30,7 +32,9 @@ class CustomerRepository(BaseRepository[Customer]):
         result = await self.session.exec(statement)
         return list(result.all()), count
 
-    async def create(self, customer_in: CustomerCreate, owner_id: uuid.UUID) -> Customer:
+    async def create(
+        self, customer_in: CustomerCreate, owner_id: uuid.UUID
+    ) -> Customer:
         customer = Customer.model_validate(customer_in, update={"owner_id": owner_id})
         return await self.add(customer)
 

@@ -22,7 +22,9 @@ class TestUsers:
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 
-        r = client.patch(f"{settings.API_V1_STR}/users/me", json={"full_name": "Updated"})
+        r = client.patch(
+            f"{settings.API_V1_STR}/users/me", json={"full_name": "Updated"}
+        )
         assert r.status_code == 200
 
     def test_delete_user_me(self, client: TestClient, mock_user):
@@ -34,10 +36,17 @@ class TestUsers:
         r = client.delete(f"{settings.API_V1_STR}/users/me")
         assert r.status_code == 204
 
-    def test_delete_user_me_superuser_forbidden(self, client: TestClient, mock_superuser):
+    def test_delete_user_me_superuser_forbidden(
+        self, client: TestClient, mock_superuser
+    ):
         from app.exceptions import ForbiddenError
+
         mock_svc = AsyncMock()
-        mock_svc.delete_me = AsyncMock(side_effect=ForbiddenError("Super users are not allowed to delete themselves"))
+        mock_svc.delete_me = AsyncMock(
+            side_effect=ForbiddenError(
+                "Super users are not allowed to delete themselves"
+            )
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_superuser
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 
@@ -55,8 +64,11 @@ class TestUsers:
 
     def test_read_user_by_id_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
-        mock_svc.get_by_id_for_user = AsyncMock(side_effect=NotFoundError("User not found"))
+        mock_svc.get_by_id_for_user = AsyncMock(
+            side_effect=NotFoundError("User not found")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 
@@ -69,7 +81,9 @@ class TestAdminUsers:
         mock_svc = AsyncMock()
         mock_svc.list_users = AsyncMock(return_value=([mock_superuser], 1))
         app.dependency_overrides[deps.get_current_user] = lambda: mock_superuser
-        app.dependency_overrides[deps.get_current_active_superuser] = lambda: mock_superuser
+        app.dependency_overrides[deps.get_current_active_superuser] = lambda: (
+            mock_superuser
+        )
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/admin/users")
@@ -80,7 +94,9 @@ class TestAdminUsers:
         mock_svc = AsyncMock()
         mock_svc.create_user_as_admin = AsyncMock(return_value=mock_superuser)
         app.dependency_overrides[deps.get_current_user] = lambda: mock_superuser
-        app.dependency_overrides[deps.get_current_active_superuser] = lambda: mock_superuser
+        app.dependency_overrides[deps.get_current_active_superuser] = lambda: (
+            mock_superuser
+        )
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 
         r = client.post(
@@ -94,7 +110,9 @@ class TestAdminUsers:
         mock_svc = AsyncMock()
         mock_svc.get_by_id_or_404 = AsyncMock(return_value=mock_superuser)
         app.dependency_overrides[deps.get_current_user] = lambda: mock_superuser
-        app.dependency_overrides[deps.get_current_active_superuser] = lambda: mock_superuser
+        app.dependency_overrides[deps.get_current_active_superuser] = lambda: (
+            mock_superuser
+        )
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/admin/users/{uuid.uuid4()}")
@@ -106,7 +124,9 @@ class TestAdminUsers:
         mock_superuser.is_active = False
         mock_svc.update_user_as_admin = AsyncMock(return_value=mock_superuser)
         app.dependency_overrides[deps.get_current_user] = lambda: mock_superuser
-        app.dependency_overrides[deps.get_current_active_superuser] = lambda: mock_superuser
+        app.dependency_overrides[deps.get_current_active_superuser] = lambda: (
+            mock_superuser
+        )
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 
         r = client.patch(
@@ -120,7 +140,9 @@ class TestAdminUsers:
         mock_svc = AsyncMock()
         mock_svc.delete_user = AsyncMock(return_value=None)
         app.dependency_overrides[deps.get_current_user] = lambda: mock_superuser
-        app.dependency_overrides[deps.get_current_active_superuser] = lambda: mock_superuser
+        app.dependency_overrides[deps.get_current_active_superuser] = lambda: (
+            mock_superuser
+        )
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/admin/users/{uuid.uuid4()}")
@@ -128,10 +150,17 @@ class TestAdminUsers:
 
     def test_admin_delete_self_forbidden(self, client: TestClient, mock_superuser):
         from app.exceptions import ForbiddenError
+
         mock_svc = AsyncMock()
-        mock_svc.delete_user = AsyncMock(side_effect=ForbiddenError("Super users are not allowed to delete themselves"))
+        mock_svc.delete_user = AsyncMock(
+            side_effect=ForbiddenError(
+                "Super users are not allowed to delete themselves"
+            )
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_superuser
-        app.dependency_overrides[deps.get_current_active_superuser] = lambda: mock_superuser
+        app.dependency_overrides[deps.get_current_active_superuser] = lambda: (
+            mock_superuser
+        )
         app.dependency_overrides[deps.get_user_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/admin/users/{uuid.uuid4()}")

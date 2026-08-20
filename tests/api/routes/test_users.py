@@ -227,7 +227,9 @@ def test_delete_user_not_found(
 def test_delete_user_current_super_user_error(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    super_user = db.exec(select(User).where(User.email == settings.FIRST_SUPERUSER)).first()
+    super_user = db.exec(
+        select(User).where(User.email == settings.FIRST_SUPERUSER)
+    ).first()
     assert super_user
     user_id = super_user.id
 

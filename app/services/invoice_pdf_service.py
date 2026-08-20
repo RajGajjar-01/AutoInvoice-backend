@@ -14,7 +14,7 @@ _jinja_env = Environment(
 
 
 def _format_currency(value: float, currency: str = "INR") -> str:
-    symbols = {"INR": "\u20B9", "USD": "$", "EUR": "\u20AC", "GBP": "\u00A3"}
+    symbols = {"INR": "\u20b9", "USD": "$", "EUR": "\u20ac", "GBP": "\u00a3"}
     sym = symbols.get(currency, currency + " ")
     return f"{sym}{value:,.2f}"
 

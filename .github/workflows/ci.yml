@@ -105,3 +105,5 @@ jobs:
           REDIS_PORT: 6379
           SECRET_KEY: ci-test-secret-key-not-for-production
           FIRST_SUPERUSER_PASSWORD: not-changethis
+          RATE_LIMIT_AUTH: 1000/minute
+          RATE_LIMIT_GLOBAL: 10000/minute

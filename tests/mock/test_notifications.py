@@ -46,7 +46,9 @@ class TestNotifications:
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
-        r = client.get(f"{settings.API_V1_STR}/notifications/?unread_only=true&type=reminder")
+        r = client.get(
+            f"{settings.API_V1_STR}/notifications/?unread_only=true&type=reminder"
+        )
         assert r.status_code == 200
 
     def test_create_notification(self, client: TestClient, mock_user):
@@ -73,8 +75,11 @@ class TestNotifications:
 
     def test_get_notification_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
-        mock_svc.get_owned = AsyncMock(side_effect=NotFoundError("Notification not found"))
+        mock_svc.get_owned = AsyncMock(
+            side_effect=NotFoundError("Notification not found")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
@@ -87,7 +92,9 @@ class TestNotifications:
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
-        r = client.patch(f"{settings.API_V1_STR}/notifications/{uuid.uuid4()}", json={"read": True})
+        r = client.patch(
+            f"{settings.API_V1_STR}/notifications/{uuid.uuid4()}", json={"read": True}
+        )
         assert r.status_code == 200
         assert r.json()["read"] is True
 
@@ -168,8 +175,11 @@ def _settings(overrides=None):
 class TestCompanySettings:
     def test_get_settings_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
-        mock_svc.get_for_owner = AsyncMock(side_effect=NotFoundError("Company settings not found"))
+        mock_svc.get_for_owner = AsyncMock(
+            side_effect=NotFoundError("Company settings not found")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_company_settings_service] = lambda: mock_svc
 
@@ -178,7 +188,9 @@ class TestCompanySettings:
 
     def test_get_settings(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
-        mock_svc.get_for_owner = AsyncMock(return_value=_settings({"name": "My Company"}))
+        mock_svc.get_for_owner = AsyncMock(
+            return_value=_settings({"name": "My Company"})
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_company_settings_service] = lambda: mock_svc
 

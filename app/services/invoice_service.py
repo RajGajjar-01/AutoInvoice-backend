@@ -3,7 +3,7 @@ from typing import Any
 
 from app.core.time import get_datetime_utc
 from app.exceptions import ForbiddenError, NotFoundError
-from app.models import Customer, Invoice
+from app.models import Invoice
 from app.repositories.customer_repository import CustomerRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.schemas import InvoiceCreate, InvoiceUpdate
@@ -26,7 +26,9 @@ class InvoiceService:
             raise ForbiddenError("Not enough permissions")
         return invoice
 
-    async def get_with_customer(self, invoice_id: uuid.UUID, owner_id: uuid.UUID) -> Invoice:
+    async def get_with_customer(
+        self, invoice_id: uuid.UUID, owner_id: uuid.UUID
+    ) -> Invoice:
         invoice = await self.repo.get_with_customer(invoice_id, owner_id)
         if not invoice:
             raise NotFoundError("Invoice not found")
@@ -93,7 +95,9 @@ class InvoiceService:
                 for item in update_data["items"]
             ]
 
-            hide_pricing = update_data.get("document_type", invoice.document_type) == "challan"
+            hide_pricing = (
+                update_data.get("document_type", invoice.document_type) == "challan"
+            )
             totals = compute_totals(
                 update_data["items"],
                 discount=update_data.get("discount", invoice.discount or 0) or 0,

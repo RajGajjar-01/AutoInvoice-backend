@@ -51,8 +51,11 @@ SENSITIVE_KEYS = {
 }
 
 
-def _scrub_sentry_event(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
+def _scrub_sentry_event(
+    event: dict[str, Any], hint: dict[str, Any]
+) -> dict[str, Any] | None:
     _ = hint
+
     def _scrub_dict(d: dict[str, Any]) -> None:
         for k, v in list(d.items()):
             if any(sens in k.lower() for sens in SENSITIVE_KEYS):
@@ -90,7 +93,9 @@ if settings.SENTRY_DSN:
         before_send=_scrub_sentry_event,
         traces_sample_rate=1.0 if settings.ENVIRONMENT != "production" else 0.2,
     )
-    logger.info("Sentry initialized with PII scrubber for environment: %s", settings.ENVIRONMENT)
+    logger.info(
+        "Sentry initialized with PII scrubber for environment: %s", settings.ENVIRONMENT
+    )
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -111,9 +116,7 @@ app.add_middleware(SlowAPIMiddleware)
 
 
 @app.exception_handler(RateLimitExceeded)
-def rate_limit_exceeded_handler(
-    request: Request, exc: RateLimitExceeded
-) -> Response:
+def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
     response = JSONResponse(
         status_code=429,
         content={
@@ -149,22 +152,30 @@ async def auth_exception_handler(request: Request, exc: AuthError) -> JSONRespon
 
 
 @app.exception_handler(NotFoundError)
-async def not_found_exception_handler(request: Request, exc: NotFoundError) -> JSONResponse:
+async def not_found_exception_handler(
+    request: Request, exc: NotFoundError
+) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": exc.message})
 
 
 @app.exception_handler(ForbiddenError)
-async def forbidden_exception_handler(request: Request, exc: ForbiddenError) -> JSONResponse:
+async def forbidden_exception_handler(
+    request: Request, exc: ForbiddenError
+) -> JSONResponse:
     return JSONResponse(status_code=403, content={"detail": exc.message})
 
 
 @app.exception_handler(ConflictError)
-async def conflict_exception_handler(request: Request, exc: ConflictError) -> JSONResponse:
+async def conflict_exception_handler(
+    request: Request, exc: ConflictError
+) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": exc.message})
 
 
 @app.exception_handler(ValidationError)
-async def validation_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": exc.message})
 
 

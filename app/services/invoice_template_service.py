@@ -20,43 +20,71 @@ def _ensure_valid_payload(template: InvoiceTemplate) -> None:
             or template.imported_html
             or template.imported_pdf_data_url
         ):
-            raise ValidationError("built_in templates cannot include custom/imported data")
+            raise ValidationError(
+                "built_in templates cannot include custom/imported data"
+            )
 
     if template.kind == InvoiceTemplateKind.custom:
         if template.custom_data is None:
             raise ValidationError("custom_data is required for kind=custom")
-        if template.built_in_id or template.imported_html or template.imported_pdf_data_url:
-            raise ValidationError("custom templates cannot include built_in/imported data")
+        if (
+            template.built_in_id
+            or template.imported_html
+            or template.imported_pdf_data_url
+        ):
+            raise ValidationError(
+                "custom templates cannot include built_in/imported data"
+            )
 
     if template.kind == InvoiceTemplateKind.imported_html:
         if not template.imported_html:
             raise ValidationError("imported_html is required for kind=imported_html")
-        if template.built_in_id or template.custom_data is not None or template.imported_pdf_data_url:
-            raise ValidationError("imported_html templates cannot include other template data")
+        if (
+            template.built_in_id
+            or template.custom_data is not None
+            or template.imported_pdf_data_url
+        ):
+            raise ValidationError(
+                "imported_html templates cannot include other template data"
+            )
 
     if template.kind == InvoiceTemplateKind.imported_pdf:
         if not template.imported_pdf_data_url:
-            raise ValidationError("imported_pdf_data_url is required for kind=imported_pdf")
-        if template.built_in_id or template.custom_data is not None or template.imported_html:
-            raise ValidationError("imported_pdf templates cannot include other template data")
+            raise ValidationError(
+                "imported_pdf_data_url is required for kind=imported_pdf"
+            )
+        if (
+            template.built_in_id
+            or template.custom_data is not None
+            or template.imported_html
+        ):
+            raise ValidationError(
+                "imported_pdf templates cannot include other template data"
+            )
 
     if template.kind == InvoiceTemplateKind.imported_excel:
         if template.imported_excel_columns is None:
-            raise ValidationError("imported_excel_columns is required for kind=imported_excel")
+            raise ValidationError(
+                "imported_excel_columns is required for kind=imported_excel"
+            )
         if (
             template.built_in_id
             or template.custom_data is not None
             or template.imported_html
             or template.imported_pdf_data_url
         ):
-            raise ValidationError("imported_excel templates cannot include other template data")
+            raise ValidationError(
+                "imported_excel templates cannot include other template data"
+            )
 
 
 class InvoiceTemplateService:
     def __init__(self, repo: InvoiceTemplateRepository) -> None:
         self.repo = repo
 
-    async def get_owned(self, template_id: uuid.UUID, owner_id: uuid.UUID) -> InvoiceTemplate:
+    async def get_owned(
+        self, template_id: uuid.UUID, owner_id: uuid.UUID
+    ) -> InvoiceTemplate:
         template = await self.repo.get(template_id)
         if not template:
             raise NotFoundError("Invoice template not found")
@@ -75,8 +103,12 @@ class InvoiceTemplateService:
             raise NotFoundError("No active invoice template")
         return template
 
-    async def create(self, template_in: InvoiceTemplateCreate, owner_id: uuid.UUID) -> InvoiceTemplate:
-        template = InvoiceTemplate.model_validate(template_in, update={"owner_id": owner_id})
+    async def create(
+        self, template_in: InvoiceTemplateCreate, owner_id: uuid.UUID
+    ) -> InvoiceTemplate:
+        template = InvoiceTemplate.model_validate(
+            template_in, update={"owner_id": owner_id}
+        )
         _ensure_valid_payload(template)
 
         if template.is_active:
@@ -86,7 +118,10 @@ class InvoiceTemplateService:
         return await self.repo.add(template)
 
     async def update(
-        self, template_id: uuid.UUID, owner_id: uuid.UUID, template_in: InvoiceTemplateUpdate
+        self,
+        template_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        template_in: InvoiceTemplateUpdate,
     ) -> InvoiceTemplate:
         template = await self.get_owned(template_id, owner_id)
         update_data = template_in.model_dump(exclude_unset=True)
@@ -101,7 +136,9 @@ class InvoiceTemplateService:
 
         return await self.repo.add(template)
 
-    async def activate(self, template_id: uuid.UUID, owner_id: uuid.UUID) -> InvoiceTemplate:
+    async def activate(
+        self, template_id: uuid.UUID, owner_id: uuid.UUID
+    ) -> InvoiceTemplate:
         template = await self.get_owned(template_id, owner_id)
         await self.repo.deactivate_all_except(owner_id, exclude_id=template.id)
         template.is_active = True

@@ -48,14 +48,23 @@ class TestTables:
 
     def test_create_table_duplicate_columns(self, client: TestClient, mock_user):
         from app.exceptions import ValidationError
+
         mock_svc = AsyncMock()
-        mock_svc.create = AsyncMock(side_effect=ValidationError("Column names must be unique"))
+        mock_svc.create = AsyncMock(
+            side_effect=ValidationError("Column names must be unique")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.post(
             f"{settings.API_V1_STR}/tables/",
-            json={"name": "Bad", "columns": [{"name": "col1", "type": "text"}, {"name": "col1", "type": "number"}]},
+            json={
+                "name": "Bad",
+                "columns": [
+                    {"name": "col1", "type": "text"},
+                    {"name": "col1", "type": "number"},
+                ],
+            },
         )
         assert r.status_code == 422
 
@@ -70,8 +79,11 @@ class TestTables:
 
     def test_get_table_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
-        mock_svc.get_table_with_rows = AsyncMock(side_effect=NotFoundError("Table not found"))
+        mock_svc.get_table_with_rows = AsyncMock(
+            side_effect=NotFoundError("Table not found")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
@@ -84,7 +96,9 @@ class TestTables:
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
-        r = client.patch(f"{settings.API_V1_STR}/tables/{uuid.uuid4()}", json={"name": "Updated"})
+        r = client.patch(
+            f"{settings.API_V1_STR}/tables/{uuid.uuid4()}", json={"name": "Updated"}
+        )
         assert r.status_code == 200
 
     def test_delete_table(self, client: TestClient, mock_user):
@@ -145,8 +159,11 @@ class TestTableRows:
 
     def test_create_row_missing_mandatory(self, client: TestClient, mock_user):
         from app.exceptions import ValidationError
+
         mock_svc = AsyncMock()
-        mock_svc.add_row = AsyncMock(side_effect=ValidationError("Missing mandatory fields: name"))
+        mock_svc.add_row = AsyncMock(
+            side_effect=ValidationError("Missing mandatory fields: name")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
@@ -174,7 +191,9 @@ class TestTableRows:
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
-        r = client.delete(f"{settings.API_V1_STR}/tables/{uuid.uuid4()}/rows/{uuid.uuid4()}")
+        r = client.delete(
+            f"{settings.API_V1_STR}/tables/{uuid.uuid4()}/rows/{uuid.uuid4()}"
+        )
         assert r.status_code == 204
 
     def test_bulk_delete_rows(self, client: TestClient, mock_user):
@@ -210,5 +229,7 @@ class TestTableReminders:
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
-        r = client.delete(f"{settings.API_V1_STR}/tables/{uuid.uuid4()}/reminders/{uuid.uuid4()}")
+        r = client.delete(
+            f"{settings.API_V1_STR}/tables/{uuid.uuid4()}/reminders/{uuid.uuid4()}"
+        )
         assert r.status_code == 204

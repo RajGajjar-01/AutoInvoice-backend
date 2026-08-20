@@ -1,5 +1,6 @@
 import uuid
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from app.core.security import encrypt_field
@@ -8,7 +9,6 @@ from app.models import CompanySettings
 from app.schemas.company_settings import (
     CompanySettingsCreate,
     CompanySettingsPublic,
-    CompanySettingsUpdate,
 )
 from app.services.company_settings_service import CompanySettingsService
 
@@ -24,7 +24,9 @@ class TestCompanySettingsEncryptionService:
 
         # Mock repo.create to store the model as passed (with encrypted fields) and return it
         async def mock_repo_create(settings_in, owner_id):
-            model = CompanySettings.model_validate(settings_in, update={"owner_id": owner_id})
+            model = CompanySettings.model_validate(
+                settings_in, update={"owner_id": owner_id}
+            )
             return model
 
         repo.create = AsyncMock(side_effect=mock_repo_create)

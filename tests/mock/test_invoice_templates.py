@@ -52,8 +52,11 @@ class TestTemplateList:
 
     def test_get_active_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
-        mock_svc.get_active = AsyncMock(side_effect=NotFoundError("No active invoice template"))
+        mock_svc.get_active = AsyncMock(
+            side_effect=NotFoundError("No active invoice template")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
@@ -73,8 +76,11 @@ class TestTemplateGet:
 
     def test_get_template_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
-        mock_svc.get_owned = AsyncMock(side_effect=NotFoundError("Invoice template not found"))
+        mock_svc.get_owned = AsyncMock(
+            side_effect=NotFoundError("Invoice template not found")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
@@ -118,7 +124,9 @@ class TestTemplateActivate:
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
-        r = client.post(f"{settings.API_V1_STR}/invoice-templates/{uuid.uuid4()}/activate")
+        r = client.post(
+            f"{settings.API_V1_STR}/invoice-templates/{uuid.uuid4()}/activate"
+        )
         assert r.status_code == 200
         assert r.json()["is_active"] is True
 

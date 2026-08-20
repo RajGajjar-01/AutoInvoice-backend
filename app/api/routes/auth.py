@@ -6,8 +6,6 @@ from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Request, 
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import SQLModel
 
-logger = logging.getLogger(__name__)
-
 from app.api.deps import CurrentUser, SessionDep, UserServiceDep
 from app.core import security
 from app.core.config import settings
@@ -32,6 +30,8 @@ from app.services.email_service import (
     verify_password_reset_token,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 ACCESS_TOKEN_MAX_AGE = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
@@ -49,7 +49,9 @@ class AuthResponse(Token):
     user: UserPublic | None = None
 
 
-def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+def _set_auth_cookies(
+    response: Response, access_token: str, refresh_token: str
+) -> None:
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -72,7 +74,13 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 
 @router.post("/signup", response_model=AuthResponse, status_code=201)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
-async def signup(request: Request, response: Response, user_in: UserRegister, user_service: UserServiceDep, background_tasks: BackgroundTasks) -> AuthResponse:
+async def signup(
+    request: Request,
+    response: Response,
+    user_in: UserRegister,
+    user_service: UserServiceDep,
+    background_tasks: BackgroundTasks,
+) -> AuthResponse:
     _ = request
     user = await user_service.signup(user_in)
     code = await verification_service.issue_code(user.id)
@@ -87,7 +95,9 @@ async def signup(request: Request, response: Response, user_in: UserRegister, us
             html_content=email_data.html_content,
         )
     else:
-        logger.warning(f"[DEV / NO BREVO KEY] Verification code for {user.email}: {code}")
+        logger.warning(
+            f"[DEV / NO BREVO KEY] Verification code for {user.email}: {code}"
+        )
     access_token = security.create_access_token(subject=user.id)
     refresh_token = security.create_refresh_token(subject=user.id)
     _set_auth_cookies(response, access_token, refresh_token)
@@ -101,7 +111,12 @@ async def signup(request: Request, response: Response, user_in: UserRegister, us
 
 @router.post("/login", response_model=AuthResponse)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
-async def login(request: Request, response: Response, body: LoginRequest, user_service: UserServiceDep) -> AuthResponse:
+async def login(
+    request: Request,
+    response: Response,
+    body: LoginRequest,
+    user_service: UserServiceDep,
+) -> AuthResponse:
     _ = request
     user = await user_service.authenticate(body.email, body.password)
     if not user:
@@ -142,6 +157,7 @@ async def refresh_token(
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     import uuid
+
     try:
         user_uuid = uuid.UUID(user_id)
     except ValueError:
@@ -195,7 +211,12 @@ async def verify_email(
 
 @router.post("/resend-verification-email", response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
-async def resend_verification_email(request: Request, response: Response, current_user: CurrentUser, background_tasks: BackgroundTasks) -> Message:
+async def resend_verification_email(
+    request: Request,
+    response: Response,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+) -> Message:
     _ = request
     _ = response
     if current_user.is_verified:
@@ -214,13 +235,21 @@ async def resend_verification_email(request: Request, response: Response, curren
             html_content=email_data.html_content,
         )
     else:
-        logger.warning(f"[DEV / NO BREVO KEY] Verification code for {current_user.email}: {code}")
+        logger.warning(
+            f"[DEV / NO BREVO KEY] Verification code for {current_user.email}: {code}"
+        )
     return Message(message="Verification code resent")
 
 
 @router.post("/forgot-password", response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
-async def forgot_password(request: Request, response: Response, email: str, user_service: UserServiceDep, background_tasks: BackgroundTasks) -> Message:
+async def forgot_password(
+    request: Request,
+    response: Response,
+    email: str,
+    user_service: UserServiceDep,
+    background_tasks: BackgroundTasks,
+) -> Message:
     _ = request
     _ = response
     user = await user_service.get_by_email(email)
@@ -237,7 +266,9 @@ async def forgot_password(request: Request, response: Response, email: str, user
                 html_content=email_data.html_content,
             )
         else:
-            logger.warning(f"[DEV / NO BREVO KEY] Password reset link for {user.email}: {settings.FRONTEND_HOST}/reset-password?token={password_reset_token}")
+            logger.warning(
+                f"[DEV / NO BREVO KEY] Password reset link for {user.email}: {settings.FRONTEND_HOST}/reset-password?token={password_reset_token}"
+            )
     return Message(
         message="If that email is registered, a password reset link has been sent"
     )
@@ -245,7 +276,12 @@ async def forgot_password(request: Request, response: Response, email: str, user
 
 @router.post("/reset-password", response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
-async def reset_password(request: Request, response: Response, body: NewPassword, user_service: UserServiceDep) -> Message:
+async def reset_password(
+    request: Request,
+    response: Response,
+    body: NewPassword,
+    user_service: UserServiceDep,
+) -> Message:
     _ = request
     _ = response
     email = verify_password_reset_token(token=body.token)

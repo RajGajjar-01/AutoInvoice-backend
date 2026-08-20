@@ -27,7 +27,9 @@ def _patch_limiter() -> Generator[None, None, None]:
     limiter._storage = mem_storage
     limiter._limiter.storage = mem_storage  # type: ignore[assignment]
     limiter._default_limits = [
-        LimitGroup("5/minute", limiter._key_func, None, False, None, None, None, 1, False),
+        LimitGroup(
+            "5/minute", limiter._key_func, None, False, None, None, None, 1, False
+        ),
     ]
 
     yield
@@ -67,7 +69,9 @@ class TestRateLimitingGlobal:
                 return
         pytest.fail("Did not receive a 429 within 100 requests")
 
-    def test_exempt_route_not_blocked_by_other_route_limit(self, client: TestClient) -> None:
+    def test_exempt_route_not_blocked_by_other_route_limit(
+        self, client: TestClient
+    ) -> None:
         for _ in range(10):
             client.get("/api/v1/openapi.json")
         resp = client.get("/health")

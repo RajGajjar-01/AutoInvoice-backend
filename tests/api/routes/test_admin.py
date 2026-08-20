@@ -15,7 +15,11 @@ def test_admin_create_list_and_get_user(
     create_response = client.post(
         f"{settings.API_V1_STR}/admin/users",
         headers=superuser_token_headers,
-        json={"email": email, "password": random_lower_string(), "full_name": "Admin Created"},
+        json={
+            "email": email,
+            "password": random_lower_string(),
+            "full_name": "Admin Created",
+        },
     )
     assert create_response.status_code == 200
     user_id = create_response.json()["id"]
@@ -37,13 +41,16 @@ def test_admin_get_user_not_found(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/admin/users/{uuid.uuid4()}", headers=superuser_token_headers
+        f"{settings.API_V1_STR}/admin/users/{uuid.uuid4()}",
+        headers=superuser_token_headers,
     )
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found"
 
 
-def test_admin_update_user(client: TestClient, superuser_token_headers: dict[str, str]) -> None:
+def test_admin_update_user(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
     create_response = client.post(
         f"{settings.API_V1_STR}/admin/users",
         headers=superuser_token_headers,
@@ -65,10 +72,15 @@ def test_admin_update_user(client: TestClient, superuser_token_headers: dict[str
 def test_admin_delete_user_self_forbidden(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    superuser = db.exec(select(User).where(User.email == settings.FIRST_SUPERUSER)).first()
+    superuser = db.exec(
+        select(User).where(User.email == settings.FIRST_SUPERUSER)
+    ).first()
     assert superuser is not None
     response = client.delete(
-        f"{settings.API_V1_STR}/admin/users/{superuser.id}", headers=superuser_token_headers
+        f"{settings.API_V1_STR}/admin/users/{superuser.id}",
+        headers=superuser_token_headers,
     )
     assert response.status_code == 403
-    assert response.json()["detail"] == "Super users are not allowed to delete themselves"
+    assert (
+        response.json()["detail"] == "Super users are not allowed to delete themselves"
+    )

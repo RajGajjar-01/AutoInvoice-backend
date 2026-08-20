@@ -11,7 +11,10 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("/", response_model=UsersPublic)
 async def read_users(
-    superuser: SuperUserDep, user_service: UserServiceDep, skip: int = 0, limit: int = 100
+    superuser: SuperUserDep,
+    user_service: UserServiceDep,
+    skip: int = 0,
+    limit: int = 100,
 ) -> Any:
     users, count = await user_service.list_users(skip=skip, limit=limit)
     return UsersPublic(data=[UserPublic.model_validate(u) for u in users], count=count)
@@ -31,7 +34,9 @@ async def update_user_me(
 
 
 @router.delete("/me", status_code=204)
-async def delete_user_me(current_user: CurrentUser, user_service: UserServiceDep) -> None:
+async def delete_user_me(
+    current_user: CurrentUser, user_service: UserServiceDep
+) -> None:
     await user_service.delete_me(current_user)
 
 
@@ -45,7 +50,10 @@ async def read_user_by_id(
 
 @router.patch("/{user_id}", response_model=UserPublic)
 async def update_user(
-    user_id: uuid.UUID, superuser: SuperUserDep, user_in: UserUpdate, user_service: UserServiceDep
+    user_id: uuid.UUID,
+    superuser: SuperUserDep,
+    user_in: UserUpdate,
+    user_service: UserServiceDep,
 ) -> Any:
     user = await user_service.update_user(user_id, user_in)
     return UserPublic.model_validate(user)

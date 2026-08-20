@@ -48,12 +48,14 @@ class InvoiceTemplateRepository(BaseRepository[InvoiceTemplate]):
         result = await self.session.exec(statement)
         return result.first()
 
-    async def deactivate_all_except(self, owner_id: uuid.UUID, exclude_id: uuid.UUID | None = None) -> None:
+    async def deactivate_all_except(
+        self, owner_id: uuid.UUID, exclude_id: uuid.UUID | None = None
+    ) -> None:
         stmt = (
             sa_update(InvoiceTemplate)
             .where(
                 InvoiceTemplate.owner_id == owner_id,
-                InvoiceTemplate.is_active == True,
+                InvoiceTemplate.is_active == True,  # noqa: E712
             )
             .values(is_active=False, updated_at=get_datetime_utc())
         )
@@ -61,10 +63,16 @@ class InvoiceTemplateRepository(BaseRepository[InvoiceTemplate]):
             stmt = stmt.where(InvoiceTemplate.id != exclude_id)
         await self.session.exec(stmt)
 
-    async def create(self, template_in: InvoiceTemplateCreate, owner_id: uuid.UUID) -> InvoiceTemplate:
-        template = InvoiceTemplate.model_validate(template_in, update={"owner_id": owner_id})
+    async def create(
+        self, template_in: InvoiceTemplateCreate, owner_id: uuid.UUID
+    ) -> InvoiceTemplate:
+        template = InvoiceTemplate.model_validate(
+            template_in, update={"owner_id": owner_id}
+        )
         return await self.add(template)
 
-    async def update(self, template: InvoiceTemplate, update_data: dict[str, Any]) -> InvoiceTemplate:
+    async def update(
+        self, template: InvoiceTemplate, update_data: dict[str, Any]
+    ) -> InvoiceTemplate:
         template.sqlmodel_update(update_data)
         return await self.add(template)

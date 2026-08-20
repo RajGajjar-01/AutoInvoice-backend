@@ -9,7 +9,7 @@ from app.services.invoice_pdf_service import _format_currency
 
 class TestFormatCurrency:
     def test_inr(self):
-        assert "\u20B9" in _format_currency(1000.50)
+        assert "\u20b9" in _format_currency(1000.50)
         assert "1,000.50" in _format_currency(1000.50)
 
     def test_usd(self):
@@ -19,7 +19,7 @@ class TestFormatCurrency:
 
     def test_eur(self):
         result = _format_currency(50, "EUR")
-        assert "\u20AC" in result
+        assert "\u20ac" in result
         assert "50.00" in result
 
     def test_zero(self):
@@ -91,7 +91,9 @@ class TestWhatsAppService:
         assert call_kwargs[1]["json"]["filename"] == "invoice.pdf"
         assert call_kwargs[1]["json"]["caption"] == "Your invoice"
         assert call_kwargs[1]["json"]["mimetype"] == "application/pdf"
-        assert call_kwargs[1]["json"]["base64"] == base64.b64encode(pdf_bytes).decode("ascii")
+        assert call_kwargs[1]["json"]["base64"] == base64.b64encode(pdf_bytes).decode(
+            "ascii"
+        )
 
     @patch("app.services.whatsapp_service.settings")
     @patch("app.services.whatsapp_service.httpx.post")

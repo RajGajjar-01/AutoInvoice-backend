@@ -8,10 +8,14 @@ from tests.utils.customer import create_random_customer
 from tests.utils.utils import random_lower_string
 
 
-def test_create_customer(client: TestClient, normal_user_token_headers: dict[str, str]) -> None:
+def test_create_customer(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
     data = {"name": random_lower_string()}
     response = client.post(
-        f"{settings.API_V1_STR}/customers/", headers=normal_user_token_headers, json=data
+        f"{settings.API_V1_STR}/customers/",
+        headers=normal_user_token_headers,
+        json=data,
     )
     assert response.status_code == 200
     content = response.json()
@@ -24,7 +28,8 @@ def test_read_customer(
 ) -> None:
     customer = create_random_customer(db)
     response = client.get(
-        f"{settings.API_V1_STR}/customers/{customer.id}", headers=normal_user_token_headers
+        f"{settings.API_V1_STR}/customers/{customer.id}",
+        headers=normal_user_token_headers,
     )
     assert response.status_code == 403
 
@@ -33,7 +38,8 @@ def test_read_customer_not_found(
     client: TestClient, normal_user_token_headers: dict[str, str]
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/customers/{uuid.uuid4()}", headers=normal_user_token_headers
+        f"{settings.API_V1_STR}/customers/{uuid.uuid4()}",
+        headers=normal_user_token_headers,
     )
     assert response.status_code == 404
 
@@ -43,7 +49,9 @@ def test_update_and_delete_customer(
 ) -> None:
     data = {"name": random_lower_string()}
     create_response = client.post(
-        f"{settings.API_V1_STR}/customers/", headers=normal_user_token_headers, json=data
+        f"{settings.API_V1_STR}/customers/",
+        headers=normal_user_token_headers,
+        json=data,
     )
     customer_id = create_response.json()["id"]
 
@@ -57,7 +65,8 @@ def test_update_and_delete_customer(
     assert update_response.json()["name"] == "updated name"
 
     delete_response = client.delete(
-        f"{settings.API_V1_STR}/customers/{customer_id}", headers=normal_user_token_headers
+        f"{settings.API_V1_STR}/customers/{customer_id}",
+        headers=normal_user_token_headers,
     )
     assert delete_response.status_code == 200
     assert delete_response.json()["message"] == "Customer deleted successfully"

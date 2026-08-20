@@ -24,7 +24,9 @@ class CustomerService:
     ) -> tuple[list[Customer], int]:
         return await self.repo.list_by_owner(owner_id, skip=skip, limit=limit)
 
-    async def create(self, customer_in: CustomerCreate, owner_id: uuid.UUID) -> Customer:
+    async def create(
+        self, customer_in: CustomerCreate, owner_id: uuid.UUID
+    ) -> Customer:
         return await self.repo.create(customer_in, owner_id)
 
     async def update(

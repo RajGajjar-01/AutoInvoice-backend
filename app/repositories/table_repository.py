@@ -48,7 +48,9 @@ class TableRepository(BaseRepository[DataTable]):
 
         if sort_by == "name":
             statement = statement.order_by(
-                col(DataTable.name).asc() if sort_order == "asc" else col(DataTable.name).desc()
+                col(DataTable.name).asc()
+                if sort_order == "asc"
+                else col(DataTable.name).desc()
             )
         else:
             statement = statement.order_by(
@@ -128,7 +130,9 @@ class TableRepository(BaseRepository[DataTable]):
         await self.session.delete(row)
         await self.session.commit()
 
-    async def bulk_delete_rows(self, table_id: uuid.UUID, row_ids: list[uuid.UUID]) -> int:
+    async def bulk_delete_rows(
+        self, table_id: uuid.UUID, row_ids: list[uuid.UUID]
+    ) -> int:
         statement = select(TableRow).where(
             TableRow.table_id == table_id, col(TableRow.id).in_(row_ids)
         )
@@ -142,7 +146,9 @@ class TableRepository(BaseRepository[DataTable]):
     async def add_reminder(
         self, table_id: uuid.UUID, reminder_in: TableReminderCreate
     ) -> TableReminder:
-        reminder = TableReminder(table_id=table_id, reminder_data=reminder_in.reminder_data)
+        reminder = TableReminder(
+            table_id=table_id, reminder_data=reminder_in.reminder_data
+        )
         self.session.add(reminder)
         await self.session.commit()
         await self.session.refresh(reminder)

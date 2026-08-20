@@ -60,6 +60,7 @@ class TestCustomers:
 
     def test_get_customer_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
         mock_svc.get_owned = AsyncMock(side_effect=NotFoundError("Customer not found"))
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
@@ -70,8 +71,11 @@ class TestCustomers:
 
     def test_get_customer_forbidden(self, client: TestClient, mock_user):
         from app.exceptions import ForbiddenError
+
         mock_svc = AsyncMock()
-        mock_svc.get_owned = AsyncMock(side_effect=ForbiddenError("Not enough permissions"))
+        mock_svc.get_owned = AsyncMock(
+            side_effect=ForbiddenError("Not enough permissions")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_customer_service] = lambda: mock_svc
 
@@ -113,6 +117,7 @@ class TestCustomers:
 
     def test_delete_customer_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(side_effect=NotFoundError("Customer not found"))
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user

@@ -94,7 +94,11 @@ async def duplicate_table(
     return await table_service.duplicate(table_id, current_user.id)
 
 
-@router.post("/{table_id}/rows", response_model=TableRowPublic, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{table_id}/rows",
+    response_model=TableRowPublic,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_table_row(
     current_user: CurrentUser,
     table_service: TableServiceDep,

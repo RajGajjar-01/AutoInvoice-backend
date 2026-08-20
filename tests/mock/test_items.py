@@ -34,7 +34,9 @@ def _item(overrides=None):
 class TestItemList:
     def test_list_items(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
-        mock_svc.list_items = AsyncMock(return_value=([_item(), _item({"name": "Item 2"})], 2))
+        mock_svc.list_items = AsyncMock(
+            return_value=([_item(), _item({"name": "Item 2"})], 2)
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
@@ -50,7 +52,9 @@ class TestItemList:
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
-        r = client.get(f"{settings.API_V1_STR}/items/?search=test&category=General&stock_status=in_stock")
+        r = client.get(
+            f"{settings.API_V1_STR}/items/?search=test&category=General&stock_status=in_stock"
+        )
         assert r.status_code == 200
 
 
@@ -67,6 +71,7 @@ class TestItemGet:
 
     def test_get_item_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
         mock_svc.get_owned = AsyncMock(side_effect=NotFoundError("Item not found"))
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
@@ -77,8 +82,11 @@ class TestItemGet:
 
     def test_get_item_forbidden(self, client: TestClient, mock_user):
         from app.exceptions import ForbiddenError
+
         mock_svc = AsyncMock()
-        mock_svc.get_owned = AsyncMock(side_effect=ForbiddenError("Not enough permissions"))
+        mock_svc.get_owned = AsyncMock(
+            side_effect=ForbiddenError("Not enough permissions")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
@@ -117,12 +125,15 @@ class TestItemUpdate:
 
     def test_update_item_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(side_effect=NotFoundError("Item not found"))
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
-        r = client.put(f"{settings.API_V1_STR}/items/{uuid.uuid4()}", json={"name": "X"})
+        r = client.put(
+            f"{settings.API_V1_STR}/items/{uuid.uuid4()}", json={"name": "X"}
+        )
         assert r.status_code == 404
 
 
@@ -138,6 +149,7 @@ class TestItemDelete:
 
     def test_delete_item_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(side_effect=NotFoundError("Item not found"))
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
@@ -173,8 +185,11 @@ class TestItemAdjustStock:
 
     def test_adjust_stock_insufficient(self, client: TestClient, mock_user):
         from app.exceptions import ValidationError
+
         mock_svc = AsyncMock()
-        mock_svc.adjust_stock = AsyncMock(side_effect=ValidationError("Insufficient stock"))
+        mock_svc.adjust_stock = AsyncMock(
+            side_effect=ValidationError("Insufficient stock")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 

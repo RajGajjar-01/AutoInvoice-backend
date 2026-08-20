@@ -56,7 +56,9 @@ class CompanySettingsBase(SQLModel):
             return None
         v_clean = str(v).strip().upper()
         if not GSTIN_REGEX.match(v_clean):
-            raise ValueError("Invalid GSTIN format. Expected 15 characters (e.g. 22AAAAA0000A1Z5)")
+            raise ValueError(
+                "Invalid GSTIN format. Expected 15 characters (e.g. 22AAAAA0000A1Z5)"
+            )
         return v_clean
 
     @field_validator("pan", mode="before")
@@ -69,7 +71,9 @@ class CompanySettingsBase(SQLModel):
         if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
             return v
         if not PAN_REGEX.match(v_clean):
-            raise ValueError("Invalid PAN format. Expected 10 alphanumeric characters (e.g. ABCDE1234F)")
+            raise ValueError(
+                "Invalid PAN format. Expected 10 alphanumeric characters (e.g. ABCDE1234F)"
+            )
         return v_clean
 
     @field_validator("bank_ifsc", mode="before")
@@ -81,7 +85,9 @@ class CompanySettingsBase(SQLModel):
         if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
             return v
         if not IFSC_REGEX.match(v_clean):
-            raise ValueError("Invalid IFSC format. Expected 11 characters (e.g. SBIN0001234)")
+            raise ValueError(
+                "Invalid IFSC format. Expected 11 characters (e.g. SBIN0001234)"
+            )
         return v_clean
 
     @field_validator("bank_account", mode="before")
@@ -93,7 +99,9 @@ class CompanySettingsBase(SQLModel):
         if v_clean.startswith("v1:") or v_clean.startswith("gAAAAA"):
             return v
         if not BANK_ACCOUNT_REGEX.match(v_clean):
-            raise ValueError("Invalid bank account number. Expected 9 to 18 numeric digits")
+            raise ValueError(
+                "Invalid bank account number. Expected 9 to 18 numeric digits"
+            )
         return v_clean
 
     @field_validator("upi_id", mode="before")
@@ -157,7 +165,9 @@ class CompanySettingsUpdate(SQLModel):
             return None
         v_clean = str(v).strip().upper()
         if not GSTIN_REGEX.match(v_clean):
-            raise ValueError("Invalid GSTIN format. Expected 15 characters (e.g. 22AAAAA0000A1Z5)")
+            raise ValueError(
+                "Invalid GSTIN format. Expected 15 characters (e.g. 22AAAAA0000A1Z5)"
+            )
         return v_clean
 
     @field_validator("pan", mode="before")
@@ -169,7 +179,9 @@ class CompanySettingsUpdate(SQLModel):
         if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
             return v
         if not PAN_REGEX.match(v_clean):
-            raise ValueError("Invalid PAN format. Expected 10 alphanumeric characters (e.g. ABCDE1234F)")
+            raise ValueError(
+                "Invalid PAN format. Expected 10 alphanumeric characters (e.g. ABCDE1234F)"
+            )
         return v_clean
 
     @field_validator("bank_ifsc", mode="before")
@@ -181,7 +193,9 @@ class CompanySettingsUpdate(SQLModel):
         if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
             return v
         if not IFSC_REGEX.match(v_clean):
-            raise ValueError("Invalid IFSC format. Expected 11 characters (e.g. SBIN0001234)")
+            raise ValueError(
+                "Invalid IFSC format. Expected 11 characters (e.g. SBIN0001234)"
+            )
         return v_clean
 
     @field_validator("bank_account", mode="before")
@@ -193,7 +207,9 @@ class CompanySettingsUpdate(SQLModel):
         if v_clean.startswith("v1:") or v_clean.startswith("gAAAAA"):
             return v
         if not BANK_ACCOUNT_REGEX.match(v_clean):
-            raise ValueError("Invalid bank account number. Expected 9 to 18 numeric digits")
+            raise ValueError(
+                "Invalid bank account number. Expected 9 to 18 numeric digits"
+            )
         return v_clean
 
     @field_validator("upi_id", mode="before")

@@ -60,7 +60,9 @@ class TestInvoiceList:
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
-        r = client.get(f"{settings.API_V1_STR}/invoices/?status=paid&document_type=invoice")
+        r = client.get(
+            f"{settings.API_V1_STR}/invoices/?status=paid&document_type=invoice"
+        )
         assert r.status_code == 200
 
 
@@ -76,8 +78,11 @@ class TestInvoiceGet:
 
     def test_get_invoice_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
-        mock_svc.get_with_customer = AsyncMock(side_effect=NotFoundError("Invoice not found"))
+        mock_svc.get_with_customer = AsyncMock(
+            side_effect=NotFoundError("Invoice not found")
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
@@ -119,12 +124,15 @@ class TestInvoiceUpdate:
 
     def test_update_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(side_effect=NotFoundError("Invoice not found"))
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
-        r = client.put(f"{settings.API_V1_STR}/invoices/{uuid.uuid4()}", json={"status": "paid"})
+        r = client.put(
+            f"{settings.API_V1_STR}/invoices/{uuid.uuid4()}", json={"status": "paid"}
+        )
         assert r.status_code == 404
 
 
@@ -140,6 +148,7 @@ class TestInvoiceDelete:
 
     def test_delete_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
+
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(side_effect=NotFoundError("Invoice not found"))
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
@@ -152,14 +161,16 @@ class TestInvoiceDelete:
 class TestInvoiceStats:
     def test_dashboard_stats(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
-        mock_svc.get_dashboard_stats = AsyncMock(return_value={
-            "total_invoices": 10,
-            "paid_count": 5,
-            "unpaid_count": 3,
-            "overdue_count": 2,
-            "total_customers": 8,
-            "total_revenue": 50000.0,
-        })
+        mock_svc.get_dashboard_stats = AsyncMock(
+            return_value={
+                "total_invoices": 10,
+                "paid_count": 5,
+                "unpaid_count": 3,
+                "overdue_count": 2,
+                "total_customers": 8,
+                "total_revenue": 50000.0,
+            }
+        )
         app.dependency_overrides[deps.get_current_user] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 

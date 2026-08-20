@@ -75,10 +75,15 @@ class InvoiceRepository(BaseRepository[Invoice]):
                 select(
                     func.count().label("total_invoices"),
                     func.count().filter(Invoice.status == "paid").label("paid_count"),
-                    func.count().filter(Invoice.status == "unpaid").label("unpaid_count"),
-                    func.count().filter(Invoice.status == "overdue").label("overdue_count"),
+                    func.count()
+                    .filter(Invoice.status == "unpaid")
+                    .label("unpaid_count"),
+                    func.count()
+                    .filter(Invoice.status == "overdue")
+                    .label("overdue_count"),
                     func.coalesce(
-                        func.sum(Invoice.grand_total).filter(Invoice.status == "paid"), 0
+                        func.sum(Invoice.grand_total).filter(Invoice.status == "paid"),
+                        0,
                     ).label("total_revenue"),
                 )
                 .select_from(Invoice)

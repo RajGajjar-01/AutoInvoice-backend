@@ -33,12 +33,16 @@ async def read_items(
 
 
 @router.get("/categories/list")
-async def list_categories(current_user: CurrentUser, item_service: ItemServiceDep) -> list[str]:
+async def list_categories(
+    current_user: CurrentUser, item_service: ItemServiceDep
+) -> list[str]:
     return await item_service.list_categories(current_user.id)
 
 
 @router.get("/{id}", response_model=ItemPublic)
-async def read_item(current_user: CurrentUser, item_service: ItemServiceDep, id: uuid.UUID) -> Any:
+async def read_item(
+    current_user: CurrentUser, item_service: ItemServiceDep, id: uuid.UUID
+) -> Any:
     return await item_service.get_owned(id, current_user.id)
 
 
@@ -76,5 +80,7 @@ async def adjust_stock(
 
 
 @router.delete("/{id}", status_code=204)
-async def delete_item(current_user: CurrentUser, item_service: ItemServiceDep, id: uuid.UUID) -> None:
+async def delete_item(
+    current_user: CurrentUser, item_service: ItemServiceDep, id: uuid.UUID
+) -> None:
     await item_service.delete(id, current_user.id)

@@ -57,7 +57,9 @@ async def create_user(
 
 
 @router.get("/users/{user_id}", response_model=UserPublic)
-async def get_user(superuser: SuperUserDep, user_id: uuid.UUID, user_service: UserServiceDep) -> UserPublic:
+async def get_user(
+    superuser: SuperUserDep, user_id: uuid.UUID, user_service: UserServiceDep
+) -> UserPublic:
     user = await user_service.get_by_id_or_404(user_id)
     return UserPublic.model_validate(user)
 

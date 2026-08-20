@@ -19,13 +19,17 @@ class CompanySettingsRepository(BaseRepository[CompanySettings]):
     async def create(
         self, settings_in: CompanySettingsCreate, owner_id: uuid.UUID
     ) -> CompanySettings:
-        settings = CompanySettings.model_validate(settings_in, update={"owner_id": owner_id})
+        settings = CompanySettings.model_validate(
+            settings_in, update={"owner_id": owner_id}
+        )
         return await self.add(settings)
 
     async def create_default(self, owner_id: uuid.UUID, name: str) -> CompanySettings:
         settings = CompanySettings(owner_id=owner_id, name=name)
         return await self.add(settings)
 
-    async def update(self, settings: CompanySettings, update_data: dict[str, Any]) -> CompanySettings:
+    async def update(
+        self, settings: CompanySettings, update_data: dict[str, Any]
+    ) -> CompanySettings:
         settings.sqlmodel_update(update_data)
         return await self.add(settings)

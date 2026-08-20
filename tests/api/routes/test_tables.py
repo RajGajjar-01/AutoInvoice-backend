@@ -15,15 +15,15 @@ def test_create_table(
                 "name": "Name",
                 "type": "Text",
                 "mandatory": True,
-                "description": "Person name"
+                "description": "Person name",
             },
             {
                 "name": "Email",
                 "type": "Text",
                 "mandatory": False,
-                "description": "Email address"
-            }
-        ]
+                "description": "Email address",
+            },
+        ],
     }
     response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -48,8 +48,8 @@ def test_create_table_duplicate_column_names(
         "name": "Test Table",
         "columns": [
             {"name": "Name", "type": "Text", "mandatory": True},
-            {"name": "Name", "type": "Text", "mandatory": False}
-        ]
+            {"name": "Name", "type": "Text", "mandatory": False},
+        ],
     }
     response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -68,7 +68,7 @@ def test_list_tables(
     for i in range(3):
         data = {
             "name": f"Table {i}",
-            "columns": [{"name": "Col1", "type": "Text", "mandatory": False}]
+            "columns": [{"name": "Col1", "type": "Text", "mandatory": False}],
         }
         client.post(
             f"{settings.API_V1_STR}/tables",
@@ -98,11 +98,11 @@ def test_list_tables_with_search(
     # Create tables with specific names
     data1 = {
         "name": "Invoice Table",
-        "columns": [{"name": "Col1", "type": "Text", "mandatory": False}]
+        "columns": [{"name": "Col1", "type": "Text", "mandatory": False}],
     }
     data2 = {
         "name": "Customer Table",
-        "columns": [{"name": "Col1", "type": "Text", "mandatory": False}]
+        "columns": [{"name": "Col1", "type": "Text", "mandatory": False}],
     }
     client.post(
         f"{settings.API_V1_STR}/tables",
@@ -126,14 +126,12 @@ def test_list_tables_with_search(
     assert any("Invoice" in table["name"] for table in content["data"])
 
 
-def test_get_table(
-    client: TestClient, superuser_token_headers: dict[str, str]
-) -> None:
+def test_get_table(client: TestClient, superuser_token_headers: dict[str, str]) -> None:
     """Test getting a specific table with rows."""
     # Create table
     data = {
         "name": "Test Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -161,7 +159,7 @@ def test_update_table(
     # Create table
     data = {
         "name": "Original Name",
-        "columns": [{"name": "Col1", "type": "Text", "mandatory": False}]
+        "columns": [{"name": "Col1", "type": "Text", "mandatory": False}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -189,7 +187,7 @@ def test_delete_table(
     # Create table
     data = {
         "name": "Table to Delete",
-        "columns": [{"name": "Col1", "type": "Text", "mandatory": False}]
+        "columns": [{"name": "Col1", "type": "Text", "mandatory": False}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -220,7 +218,7 @@ def test_duplicate_table(
     # Create table
     data = {
         "name": "Original Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -264,8 +262,8 @@ def test_create_row(
         "name": "Test Table",
         "columns": [
             {"name": "Name", "type": "Text", "mandatory": True},
-            {"name": "Age", "type": "Text", "mandatory": False}
-        ]
+            {"name": "Age", "type": "Text", "mandatory": False},
+        ],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -294,7 +292,7 @@ def test_create_row_missing_mandatory_field(
     # Create table
     data = {
         "name": "Test Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -321,7 +319,7 @@ def test_update_row(
     # Create table and row
     data = {
         "name": "Test Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -357,7 +355,7 @@ def test_delete_row(
     # Create table and row
     data = {
         "name": "Test Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -389,7 +387,7 @@ def test_bulk_delete_rows(
     # Create table
     data = {
         "name": "Test Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -427,7 +425,7 @@ def test_create_reminder(
     # Create table
     data = {
         "name": "Test Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -441,7 +439,7 @@ def test_create_reminder(
         "reminder_data": {
             "type": "date",
             "date": "2024-12-31",
-            "message": "Year end reminder"
+            "message": "Year end reminder",
         }
     }
     response = client.post(
@@ -462,7 +460,7 @@ def test_delete_reminder(
     # Create table and reminder
     data = {
         "name": "Test Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -471,9 +469,7 @@ def test_delete_reminder(
     )
     table_id = create_response.json()["id"]
 
-    reminder_data = {
-        "reminder_data": {"type": "date", "date": "2024-12-31"}
-    }
+    reminder_data = {"reminder_data": {"type": "date", "date": "2024-12-31"}}
     reminder_response = client.post(
         f"{settings.API_V1_STR}/tables/{table_id}/reminders",
         headers=superuser_token_headers,
@@ -496,7 +492,7 @@ def test_ownership_isolation(
     # Create table as superuser
     data = {
         "name": "Superuser Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",
@@ -514,6 +510,7 @@ def test_ownership_isolation(
 
     # Update user password to known value
     from app.core.security import get_password_hash
+
     normal_user.hashed_password = get_password_hash(password)
     db.add(normal_user)
     db.commit()
@@ -537,7 +534,7 @@ def test_cascade_delete(
     # Create table
     data = {
         "name": "Test Table",
-        "columns": [{"name": "Name", "type": "Text", "mandatory": True}]
+        "columns": [{"name": "Name", "type": "Text", "mandatory": True}],
     }
     create_response = client.post(
         f"{settings.API_V1_STR}/tables",

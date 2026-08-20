@@ -41,7 +41,9 @@ class ItemService:
     async def create(self, item_in: ItemCreate, owner_id: uuid.UUID) -> Item:
         return await self.repo.create(item_in, owner_id)
 
-    async def update(self, item_id: uuid.UUID, owner_id: uuid.UUID, item_in: ItemUpdate) -> Item:
+    async def update(
+        self, item_id: uuid.UUID, owner_id: uuid.UUID, item_in: ItemUpdate
+    ) -> Item:
         item = await self.get_owned(item_id, owner_id)
         update_data = item_in.model_dump(exclude_unset=True)
         update_data["updated_at"] = get_datetime_utc()

@@ -42,12 +42,20 @@ class TestSignup:
         mock_service.signup = AsyncMock(return_value=mock_user)
         app.dependency_overrides[deps.get_user_service] = lambda: mock_service
 
-        monkeypatch.setattr("app.api.routes.auth.security.create_access_token", lambda **kw: "access")
-        monkeypatch.setattr("app.api.routes.auth.security.create_refresh_token", lambda **kw: "refresh")
+        monkeypatch.setattr(
+            "app.api.routes.auth.security.create_access_token", lambda **kw: "access"
+        )
+        monkeypatch.setattr(
+            "app.api.routes.auth.security.create_refresh_token", lambda **kw: "refresh"
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/auth/signup",
-            json={"email": "new@test.com", "password": "testpass123", "full_name": "New"},
+            json={
+                "email": "new@test.com",
+                "password": "testpass123",
+                "full_name": "New",
+            },
         )
         assert r.status_code == 201
         data = r.json()
@@ -56,8 +64,11 @@ class TestSignup:
 
     def test_signup_existing(self, client: TestClient):
         from app.exceptions import ConflictError
+
         mock_service = AsyncMock(spec=["signup"])
-        mock_service.signup = AsyncMock(side_effect=ConflictError("A user with this email already exists"))
+        mock_service.signup = AsyncMock(
+            side_effect=ConflictError("A user with this email already exists")
+        )
         app.dependency_overrides[deps.get_user_service] = lambda: mock_service
 
         r = client.post(
@@ -81,8 +92,12 @@ class TestLogin:
         mock_service.authenticate = AsyncMock(return_value=mock_user)
         app.dependency_overrides[deps.get_user_service] = lambda: mock_service
 
-        monkeypatch.setattr("app.api.routes.auth.security.create_access_token", lambda **kw: "access")
-        monkeypatch.setattr("app.api.routes.auth.security.create_refresh_token", lambda **kw: "refresh")
+        monkeypatch.setattr(
+            "app.api.routes.auth.security.create_access_token", lambda **kw: "access"
+        )
+        monkeypatch.setattr(
+            "app.api.routes.auth.security.create_refresh_token", lambda **kw: "refresh"
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/auth/login",
@@ -105,18 +120,29 @@ class TestLogin:
 
 class TestRefresh:
     def test_refresh_success(self, client: TestClient, monkeypatch):
-        monkeypatch.setattr("app.api.routes.auth.jwt.decode", lambda *a, **kw: {"type": "refresh", "sub": str(uuid.uuid4())})
+        monkeypatch.setattr(
+            "app.api.routes.auth.jwt.decode",
+            lambda *a, **kw: {"type": "refresh", "sub": str(uuid.uuid4())},
+        )
 
         from sqlmodel.ext.asyncio.session import AsyncSession
+
         mock_session = AsyncMock(spec=AsyncSession)
         mock_session.get = AsyncMock(return_value=_mock_user())
 
         async def override_db():
             yield mock_session
+
         app.dependency_overrides[deps.get_db] = override_db
 
-        monkeypatch.setattr("app.api.routes.auth.security.create_access_token", lambda **kw: "new_access")
-        monkeypatch.setattr("app.api.routes.auth.security.create_refresh_token", lambda **kw: "new_refresh")
+        monkeypatch.setattr(
+            "app.api.routes.auth.security.create_access_token",
+            lambda **kw: "new_access",
+        )
+        monkeypatch.setattr(
+            "app.api.routes.auth.security.create_refresh_token",
+            lambda **kw: "new_refresh",
+        )
 
         client.cookies.set("refresh_token", "valid_refresh")
         r = client.post(f"{settings.API_V1_STR}/auth/refresh")
@@ -130,7 +156,9 @@ class TestRefresh:
     def test_refresh_invalid_token(self, client: TestClient, monkeypatch):
         def bad_decode(*a, **kw):
             from jwt.exceptions import InvalidTokenError
+
             raise InvalidTokenError()
+
         monkeypatch.setattr("app.api.routes.auth.jwt.decode", bad_decode)
 
         client.cookies.set("refresh_token", "invalid")
@@ -145,11 +173,20 @@ class TestForgotPassword:
         mock_service.get_by_email = AsyncMock(return_value=mock_user)
         app.dependency_overrides[deps.get_user_service] = lambda: mock_service
 
-        monkeypatch.setattr("app.api.routes.auth.generate_password_reset_token", lambda email: "reset_tok")
-        monkeypatch.setattr("app.api.routes.auth.generate_reset_password_email", lambda **kw: MagicMock(subject="reset", html_content="<html>"))
+        monkeypatch.setattr(
+            "app.api.routes.auth.generate_password_reset_token",
+            lambda email: "reset_tok",
+        )
+        monkeypatch.setattr(
+            "app.api.routes.auth.generate_reset_password_email",
+            lambda **kw: MagicMock(subject="reset", html_content="<html>"),
+        )
         monkeypatch.setattr("app.api.routes.auth.send_email", lambda **kw: None)
 
-        r = client.post(f"{settings.API_V1_STR}/auth/forgot-password", params={"email": "user@test.com"})
+        r = client.post(
+            f"{settings.API_V1_STR}/auth/forgot-password",
+            params={"email": "user@test.com"},
+        )
         assert r.status_code == 200
 
 
@@ -161,7 +198,10 @@ class TestResetPassword:
         mock_service.update_password = AsyncMock(return_value=mock_user)
         app.dependency_overrides[deps.get_user_service] = lambda: mock_service
 
-        monkeypatch.setattr("app.api.routes.auth.verify_password_reset_token", lambda token: "user@test.com")
+        monkeypatch.setattr(
+            "app.api.routes.auth.verify_password_reset_token",
+            lambda token: "user@test.com",
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/auth/reset-password",
@@ -170,7 +210,9 @@ class TestResetPassword:
         assert r.status_code == 200
 
     def test_reset_invalid_token(self, client: TestClient, monkeypatch):
-        monkeypatch.setattr("app.api.routes.auth.verify_password_reset_token", lambda token: None)
+        monkeypatch.setattr(
+            "app.api.routes.auth.verify_password_reset_token", lambda token: None
+        )
         r = client.post(
             f"{settings.API_V1_STR}/auth/reset-password",
             json={"token": "bad", "new_password": "newpass1234"},

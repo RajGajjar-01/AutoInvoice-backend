@@ -16,9 +16,14 @@ class TestUtils:
 
     def test_test_email(self, client: TestClient, mock_superuser, monkeypatch):
         app.dependency_overrides[deps.get_current_user] = lambda: mock_superuser
-        app.dependency_overrides[deps.get_current_active_superuser] = lambda: mock_superuser
+        app.dependency_overrides[deps.get_current_active_superuser] = lambda: (
+            mock_superuser
+        )
 
-        monkeypatch.setattr("app.api.routes.utils.generate_test_email", lambda **kw: MagicMock(subject="Test", html_content="<html>"))
+        monkeypatch.setattr(
+            "app.api.routes.utils.generate_test_email",
+            lambda **kw: MagicMock(subject="Test", html_content="<html>"),
+        )
         monkeypatch.setattr("app.api.routes.utils.send_email", lambda **kw: None)
 
         r = client.post(
@@ -49,7 +54,11 @@ class TestPrivate:
 
         r = client.post(
             f"{settings.API_V1_STR}/private/users/",
-            json={"email": "private@test.com", "password": "testpass123", "full_name": "Private User"},
+            json={
+                "email": "private@test.com",
+                "password": "testpass123",
+                "full_name": "Private User",
+            },
         )
         assert r.status_code == 201
         assert r.json()["email"] == "private@test.com"
@@ -69,6 +78,7 @@ class TestExceptions:
     def test_root_health(self, client: TestClient, monkeypatch):
         async def mock_ok():
             return None
+
         monkeypatch.setattr("app.main._check_postgres", mock_ok)
         monkeypatch.setattr("app.main._check_redis", mock_ok)
         r = client.get("/health")

@@ -8,7 +8,9 @@ def test_create_and_list_notifications(
 ) -> None:
     data = {"title": "Test notification", "type": "info"}
     create_response = client.post(
-        f"{settings.API_V1_STR}/notifications/", headers=normal_user_token_headers, json=data
+        f"{settings.API_V1_STR}/notifications/",
+        headers=normal_user_token_headers,
+        json=data,
     )
     assert create_response.status_code == 200
     notification_id = create_response.json()["id"]
@@ -27,7 +29,9 @@ def test_update_mark_read_and_delete(
 ) -> None:
     data = {"title": "Another notification", "type": "info"}
     create_response = client.post(
-        f"{settings.API_V1_STR}/notifications/", headers=normal_user_token_headers, json=data
+        f"{settings.API_V1_STR}/notifications/",
+        headers=normal_user_token_headers,
+        json=data,
     )
     notification_id = create_response.json()["id"]
 
@@ -58,7 +62,8 @@ def test_mark_all_read_and_clear_all(
         )
 
     mark_response = client.post(
-        f"{settings.API_V1_STR}/notifications/mark-all-read", headers=normal_user_token_headers
+        f"{settings.API_V1_STR}/notifications/mark-all-read",
+        headers=normal_user_token_headers,
     )
     assert mark_response.status_code == 200
 

@@ -94,18 +94,30 @@ def _mock_user_service(access_token="fake-google-access-token", side_effect=None
 def _setup_deps(mock_user, **overrides):
     app.dependency_overrides[deps.get_current_user] = lambda: mock_user
     if "invoice_service" in overrides:
-        app.dependency_overrides[deps.get_invoice_service] = lambda: overrides["invoice_service"]
+        app.dependency_overrides[deps.get_invoice_service] = lambda: overrides[
+            "invoice_service"
+        ]
     if "pdf_service" in overrides:
-        app.dependency_overrides[deps.get_invoice_pdf_service] = lambda: overrides["pdf_service"]
+        app.dependency_overrides[deps.get_invoice_pdf_service] = lambda: overrides[
+            "pdf_service"
+        ]
     if "company_service" in overrides:
-        app.dependency_overrides[deps.get_company_settings_service] = lambda: overrides["company_service"]
+        app.dependency_overrides[deps.get_company_settings_service] = lambda: overrides[
+            "company_service"
+        ]
     if "whatsapp_service" in overrides:
-        app.dependency_overrides[deps.get_whatsapp_service] = lambda: overrides["whatsapp_service"]
+        app.dependency_overrides[deps.get_whatsapp_service] = lambda: overrides[
+            "whatsapp_service"
+        ]
     if "user_service" in overrides:
-        app.dependency_overrides[deps.get_user_service] = lambda: overrides["user_service"]
+        app.dependency_overrides[deps.get_user_service] = lambda: overrides[
+            "user_service"
+        ]
 
 
-def _mock_invoice_svc(get_with_customer_return=None, get_with_customer_side_effect=None):
+def _mock_invoice_svc(
+    get_with_customer_return=None, get_with_customer_side_effect=None
+):
     svc = AsyncMock()
     svc.get_with_customer = AsyncMock(
         return_value=get_with_customer_return,
@@ -199,7 +211,9 @@ class TestSendEmail:
     def test_send_email_invalid_email_422(self, client: TestClient, mock_user):
         inv = _invoice()
         inv.customer = _customer()
-        _setup_deps(mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv))
+        _setup_deps(
+            mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv)
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-email",
@@ -210,7 +224,9 @@ class TestSendEmail:
     def test_send_email_missing_to_email_422(self, client: TestClient, mock_user):
         inv = _invoice()
         inv.customer = _customer()
-        _setup_deps(mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv))
+        _setup_deps(
+            mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv)
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-email",
@@ -221,7 +237,9 @@ class TestSendEmail:
     def test_send_email_no_customer(self, client: TestClient, mock_user):
         inv = _invoice()
         inv.customer = None
-        _setup_deps(mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv))
+        _setup_deps(
+            mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv)
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-email",
@@ -240,7 +258,9 @@ class TestSendEmail:
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
             company_service=AsyncMock(
-                get_for_owner=AsyncMock(side_effect=NotFoundError("Company settings not found"))
+                get_for_owner=AsyncMock(
+                    side_effect=NotFoundError("Company settings not found")
+                )
             ),
             user_service=_mock_user_service(),
         )
@@ -256,7 +276,9 @@ class TestSendEmail:
 
         _setup_deps(
             mock_user,
-            invoice_service=_mock_invoice_svc(get_with_customer_side_effect=NotFoundError("Invoice not found")),
+            invoice_service=_mock_invoice_svc(
+                get_with_customer_side_effect=NotFoundError("Invoice not found")
+            ),
         )
 
         r = client.post(
@@ -295,7 +317,10 @@ class TestSendWhatsApp:
         )
 
         assert r.status_code == 200
-        assert r.json() == {"message": "WhatsApp message sent", "message_id": "wa_msg_123"}
+        assert r.json() == {
+            "message": "WhatsApp message sent",
+            "message_id": "wa_msg_123",
+        }
 
     def test_send_whatsapp_strips_plus_prefix(self, client: TestClient, mock_user):
         inv = _invoice()
@@ -345,7 +370,9 @@ class TestSendWhatsApp:
     def test_send_whatsapp_missing_phone_422(self, client: TestClient, mock_user):
         inv = _invoice()
         inv.customer = _customer()
-        _setup_deps(mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv))
+        _setup_deps(
+            mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv)
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-whatsapp",
@@ -356,7 +383,9 @@ class TestSendWhatsApp:
     def test_send_whatsapp_no_customer(self, client: TestClient, mock_user):
         inv = _invoice()
         inv.customer = None
-        _setup_deps(mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv))
+        _setup_deps(
+            mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv)
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-whatsapp",
@@ -374,7 +403,9 @@ class TestSendWhatsApp:
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
             company_service=AsyncMock(
-                get_for_owner=AsyncMock(side_effect=NotFoundError("Company settings not found"))
+                get_for_owner=AsyncMock(
+                    side_effect=NotFoundError("Company settings not found")
+                )
             ),
         )
 
@@ -389,7 +420,9 @@ class TestSendWhatsApp:
 
         _setup_deps(
             mock_user,
-            invoice_service=_mock_invoice_svc(get_with_customer_side_effect=NotFoundError("Invoice not found")),
+            invoice_service=_mock_invoice_svc(
+                get_with_customer_side_effect=NotFoundError("Invoice not found")
+            ),
         )
 
         r = client.post(
@@ -411,7 +444,9 @@ class TestSendReminder:
         inv = _invoice()
         inv.customer = _customer()
         company = _company()
-        wa_mock = MagicMock(send_document=MagicMock(return_value={"messageId": "rem_123"}))
+        wa_mock = MagicMock(
+            send_document=MagicMock(return_value={"messageId": "rem_123"})
+        )
 
         _setup_deps(
             mock_user,
@@ -436,7 +471,9 @@ class TestSendReminder:
         inv = _invoice()
         inv.customer = _customer()
         company = _company()
-        wa_mock = MagicMock(send_document=MagicMock(return_value={"messageId": "rem_456"}))
+        wa_mock = MagicMock(
+            send_document=MagicMock(return_value={"messageId": "rem_456"})
+        )
 
         _setup_deps(
             mock_user,
@@ -458,7 +495,9 @@ class TestSendReminder:
     def test_send_reminder_no_customer(self, client: TestClient, mock_user):
         inv = _invoice()
         inv.customer = None
-        _setup_deps(mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv))
+        _setup_deps(
+            mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv)
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-reminder",
@@ -476,7 +515,9 @@ class TestSendReminder:
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
             company_service=AsyncMock(
-                get_for_owner=AsyncMock(side_effect=NotFoundError("Company settings not found"))
+                get_for_owner=AsyncMock(
+                    side_effect=NotFoundError("Company settings not found")
+                )
             ),
         )
 
@@ -491,7 +532,9 @@ class TestSendReminder:
 
         _setup_deps(
             mock_user,
-            invoice_service=_mock_invoice_svc(get_with_customer_side_effect=NotFoundError("Invoice not found")),
+            invoice_service=_mock_invoice_svc(
+                get_with_customer_side_effect=NotFoundError("Invoice not found")
+            ),
         )
 
         r = client.post(
@@ -503,7 +546,9 @@ class TestSendReminder:
     def test_send_reminder_missing_phone_422(self, client: TestClient, mock_user):
         inv = _invoice()
         inv.customer = _customer()
-        _setup_deps(mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv))
+        _setup_deps(
+            mock_user, invoice_service=_mock_invoice_svc(get_with_customer_return=inv)
+        )
 
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-reminder",
@@ -546,7 +591,10 @@ class TestSendEmailServiceAttachment:
         assert kwargs["headers"]["api-key"] == "fake-brevo-key"
         assert kwargs["json"]["to"] == [{"email": "x@y.com"}]
         assert kwargs["json"]["attachment"] == [
-            {"name": "invoice.pdf", "content": base64.b64encode(b"pdf-data").decode("ascii")}
+            {
+                "name": "invoice.pdf",
+                "content": base64.b64encode(b"pdf-data").decode("ascii"),
+            }
         ]
         mock_response.raise_for_status.assert_called_once()
 

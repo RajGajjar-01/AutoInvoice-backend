@@ -168,7 +168,9 @@ def get_notification_service(
     return NotificationService(repo)
 
 
-NotificationServiceDep = Annotated[NotificationService, Depends(get_notification_service)]
+NotificationServiceDep = Annotated[
+    NotificationService, Depends(get_notification_service)
+]
 
 
 def get_company_settings_repository(session: SessionDep) -> CompanySettingsRepository:
@@ -176,7 +178,9 @@ def get_company_settings_repository(session: SessionDep) -> CompanySettingsRepos
 
 
 def get_company_settings_service(
-    repo: Annotated[CompanySettingsRepository, Depends(get_company_settings_repository)],
+    repo: Annotated[
+        CompanySettingsRepository, Depends(get_company_settings_repository)
+    ],
 ) -> CompanySettingsService:
     return CompanySettingsService(repo)
 
@@ -204,7 +208,9 @@ def get_invoice_template_repository(session: SessionDep) -> InvoiceTemplateRepos
 
 
 def get_invoice_template_service(
-    repo: Annotated[InvoiceTemplateRepository, Depends(get_invoice_template_repository)],
+    repo: Annotated[
+        InvoiceTemplateRepository, Depends(get_invoice_template_repository)
+    ],
 ) -> InvoiceTemplateService:
     return InvoiceTemplateService(repo)
 

@@ -14,7 +14,9 @@ from app.schemas import (
 )
 
 
-def _validate_row_data(columns: list[Any], row_data: dict[str, Any]) -> tuple[bool, list[str]]:
+def _validate_row_data(
+    columns: list[Any], row_data: dict[str, Any]
+) -> tuple[bool, list[str]]:
     missing_fields = []
     for column in columns:
         if isinstance(column, dict):
@@ -38,13 +40,17 @@ class TableService:
     def __init__(self, repo: TableRepository) -> None:
         self.repo = repo
 
-    async def get_owned_table(self, table_id: uuid.UUID, owner_id: uuid.UUID) -> DataTable:
+    async def get_owned_table(
+        self, table_id: uuid.UUID, owner_id: uuid.UUID
+    ) -> DataTable:
         table = await self.repo.get_by_id_and_owner(table_id, owner_id)
         if not table:
             raise NotFoundError("Table not found")
         return table
 
-    async def get_table_with_rows(self, table_id: uuid.UUID, owner_id: uuid.UUID) -> DataTable:
+    async def get_table_with_rows(
+        self, table_id: uuid.UUID, owner_id: uuid.UUID
+    ) -> DataTable:
         table = await self.repo.get_with_rows_and_reminders(table_id, owner_id)
         if not table:
             raise NotFoundError("Table not found")
@@ -61,7 +67,12 @@ class TableService:
         limit: int,
     ) -> tuple[list[DataTable], int]:
         return await self.repo.list_by_owner(
-            owner_id, search=search, sort_by=sort_by, sort_order=sort_order, skip=skip, limit=limit
+            owner_id,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            skip=skip,
+            limit=limit,
         )
 
     async def create(self, table_in: DataTableCreate, owner_id: uuid.UUID) -> DataTable:
@@ -70,7 +81,9 @@ class TableService:
             raise ValidationError("Column names must be unique")
         return await self.repo.create(table_in, owner_id)
 
-    async def update(self, table_id: uuid.UUID, owner_id: uuid.UUID, table_in: DataTableUpdate) -> DataTable:
+    async def update(
+        self, table_id: uuid.UUID, owner_id: uuid.UUID, table_in: DataTableUpdate
+    ) -> DataTable:
         table = await self.get_owned_table(table_id, owner_id)
         update_data = table_in.model_dump(exclude_unset=True)
         update_data["updated_at"] = get_datetime_utc()
@@ -94,7 +107,11 @@ class TableService:
         return await self.repo.add_row(table_id, row_in)
 
     async def update_row(
-        self, table_id: uuid.UUID, owner_id: uuid.UUID, row_id: uuid.UUID, row_in: TableRowUpdate
+        self,
+        table_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        row_id: uuid.UUID,
+        row_in: TableRowUpdate,
     ) -> TableRow:
         table = await self.get_owned_table(table_id, owner_id)
         row = await self.repo.get_row(row_id)
@@ -105,7 +122,9 @@ class TableService:
             raise ValidationError(f"Missing mandatory fields: {', '.join(missing)}")
         return await self.repo.update_row(row, row_in.data)
 
-    async def delete_row(self, table_id: uuid.UUID, owner_id: uuid.UUID, row_id: uuid.UUID) -> None:
+    async def delete_row(
+        self, table_id: uuid.UUID, owner_id: uuid.UUID, row_id: uuid.UUID
+    ) -> None:
         await self.get_owned_table(table_id, owner_id)
         row = await self.repo.get_row(row_id)
         if not row or row.table_id != table_id:

@@ -17,13 +17,17 @@ def test_create_then_conflict(
 ) -> None:
     data = {"name": "Acme Inc"}
     first = client.post(
-        f"{settings.API_V1_STR}/company-settings/", headers=normal_user_token_headers, json=data
+        f"{settings.API_V1_STR}/company-settings/",
+        headers=normal_user_token_headers,
+        json=data,
     )
     assert first.status_code == 200
     assert first.json()["name"] == "Acme Inc"
 
     second = client.post(
-        f"{settings.API_V1_STR}/company-settings/", headers=normal_user_token_headers, json=data
+        f"{settings.API_V1_STR}/company-settings/",
+        headers=normal_user_token_headers,
+        json=data,
     )
     assert second.status_code == 400
     assert second.json()["detail"] == "Company settings already exist"
