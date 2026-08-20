@@ -28,14 +28,69 @@ from app.middleware.security_headers import SecurityHeadersMiddleware
 
 logger = logging.getLogger(__name__)
 
+SENSITIVE_KEYS = {
+    "password",
+    "hashed_password",
+    "token",
+    "access_token",
+    "refresh_token",
+    "secret",
+    "key",
+    "api_key",
+    "authorization",
+    "cookie",
+    "bank_account",
+    "bank_ifsc",
+    "pan",
+    "upi_id",
+    "smtp_password",
+    "openwa_api_key",
+    "openwa_session_id",
+    "google_access_token",
+    "google_refresh_token",
+}
+
+
+def _scrub_sentry_event(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
+    _ = hint
+    def _scrub_dict(d: dict[str, Any]) -> None:
+        for k, v in list(d.items()):
+            if any(sens in k.lower() for sens in SENSITIVE_KEYS):
+                d[k] = "[REDACTED]"
+            elif isinstance(v, dict):
+                _scrub_dict(v)
+            elif isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict):
+                        _scrub_dict(item)
+
+    if "request" in event and isinstance(event["request"], dict):
+        req = event["request"]
+        if "headers" in req and isinstance(req["headers"], dict):
+            for h in list(req["headers"].keys()):
+                if h.lower() in ("authorization", "cookie", "x-api-key", "set-cookie"):
+                    req["headers"][h] = "[REDACTED]"
+        if "data" in req and isinstance(req["data"], dict):
+            _scrub_dict(req["data"])
+        if "cookies" in req and isinstance(req["cookies"], dict):
+            for c in list(req["cookies"].keys()):
+                req["cookies"][c] = "[REDACTED]"
+
+    if "extra" in event and isinstance(event["extra"], dict):
+        _scrub_dict(event["extra"])
+
+    return event
+
+
 if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.ENVIRONMENT,
-        send_default_pii=True,
+        send_default_pii=False,
+        before_send=_scrub_sentry_event,
         traces_sample_rate=1.0 if settings.ENVIRONMENT != "production" else 0.2,
     )
-    logger.info("Sentry initialized for environment: %s", settings.ENVIRONMENT)
+    logger.info("Sentry initialized with PII scrubber for environment: %s", settings.ENVIRONMENT)
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:

@@ -1,9 +1,12 @@
+import logging
 from typing import Annotated, Any
 
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Request, Response
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import SQLModel
+
+logger = logging.getLogger(__name__)
 
 from app.api.deps import CurrentUser, SessionDep, UserServiceDep
 from app.core import security
@@ -72,8 +75,8 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 async def signup(request: Request, response: Response, user_in: UserRegister, user_service: UserServiceDep, background_tasks: BackgroundTasks) -> AuthResponse:
     _ = request
     user = await user_service.signup(user_in)
+    code = await verification_service.issue_code(user.id)
     if settings.emails_enabled:
-        code = await verification_service.issue_code(user.id)
         email_data = generate_verify_email(
             email_to=user.email, username=user.full_name or user.email, code=code
         )
@@ -83,6 +86,8 @@ async def signup(request: Request, response: Response, user_in: UserRegister, us
             subject=email_data.subject,
             html_content=email_data.html_content,
         )
+    else:
+        logger.warning(f"[DEV / NO BREVO KEY] Verification code for {user.email}: {code}")
     access_token = security.create_access_token(subject=user.id)
     refresh_token = security.create_refresh_token(subject=user.id)
     _set_auth_cookies(response, access_token, refresh_token)
@@ -190,41 +195,49 @@ async def verify_email(
 
 @router.post("/resend-verification-email", response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
-async def resend_verification_email(request: Request, current_user: CurrentUser, background_tasks: BackgroundTasks) -> Message:
+async def resend_verification_email(request: Request, response: Response, current_user: CurrentUser, background_tasks: BackgroundTasks) -> Message:
     _ = request
+    _ = response
     if current_user.is_verified:
         return Message(message="Email already verified")
     code = await verification_service.request_resend(current_user.id)
-    email_data = generate_verify_email(
-        email_to=current_user.email,
-        username=current_user.full_name or current_user.email,
-        code=code,
-    )
-    background_tasks.add_task(
-        send_email,
-        email_to=current_user.email,
-        subject=email_data.subject,
-        html_content=email_data.html_content,
-    )
+    if settings.emails_enabled:
+        email_data = generate_verify_email(
+            email_to=current_user.email,
+            username=current_user.full_name or current_user.email,
+            code=code,
+        )
+        background_tasks.add_task(
+            send_email,
+            email_to=current_user.email,
+            subject=email_data.subject,
+            html_content=email_data.html_content,
+        )
+    else:
+        logger.warning(f"[DEV / NO BREVO KEY] Verification code for {current_user.email}: {code}")
     return Message(message="Verification code resent")
 
 
 @router.post("/forgot-password", response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
-async def forgot_password(request: Request, email: str, user_service: UserServiceDep, background_tasks: BackgroundTasks) -> Message:
+async def forgot_password(request: Request, response: Response, email: str, user_service: UserServiceDep, background_tasks: BackgroundTasks) -> Message:
     _ = request
+    _ = response
     user = await user_service.get_by_email(email)
     if user:
         password_reset_token = generate_password_reset_token(email=email)
-        email_data = generate_reset_password_email(
-            email_to=user.email, email=email, token=password_reset_token
-        )
-        background_tasks.add_task(
-            send_email,
-            email_to=user.email,
-            subject=email_data.subject,
-            html_content=email_data.html_content,
-        )
+        if settings.emails_enabled:
+            email_data = generate_reset_password_email(
+                email_to=user.email, email=email, token=password_reset_token
+            )
+            background_tasks.add_task(
+                send_email,
+                email_to=user.email,
+                subject=email_data.subject,
+                html_content=email_data.html_content,
+            )
+        else:
+            logger.warning(f"[DEV / NO BREVO KEY] Password reset link for {user.email}: {settings.FRONTEND_HOST}/reset-password?token={password_reset_token}")
     return Message(
         message="If that email is registered, a password reset link has been sent"
     )
@@ -232,8 +245,9 @@ async def forgot_password(request: Request, email: str, user_service: UserServic
 
 @router.post("/reset-password", response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
-async def reset_password(request: Request, body: NewPassword, user_service: UserServiceDep) -> Message:
+async def reset_password(request: Request, response: Response, body: NewPassword, user_service: UserServiceDep) -> Message:
     _ = request
+    _ = response
     email = verify_password_reset_token(token=body.token)
     if not email:
         raise HTTPException(status_code=400, detail="Invalid token")

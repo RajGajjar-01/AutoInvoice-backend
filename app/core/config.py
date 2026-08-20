@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     )
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str = ""
+    ENCRYPTION_KEY: str | None = None
+    ENCRYPTION_KEY_FALLBACKS: Annotated[
+        list[str] | str, BeforeValidator(parse_cors)
+    ] = []
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     FRONTEND_HOST: str = ""
@@ -142,6 +146,10 @@ class Settings(BaseSettings):
         if self.SECRET_KEY == "changethis":
             raise ValueError(
                 'SECRET_KEY is still set to "changethis", please change it'
+            )
+        if self.ENCRYPTION_KEY and self.ENCRYPTION_KEY == "changethis":
+            raise ValueError(
+                'ENCRYPTION_KEY is still set to "changethis", please change it'
             )
         if self.POSTGRES_PASSWORD and self.POSTGRES_PASSWORD == "changethis":
             raise ValueError(

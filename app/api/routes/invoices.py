@@ -219,7 +219,7 @@ async def send_invoice_reminder(
         caption += f"({req.days_overdue} days overdue) "
     caption += f"Amount: {invoice.currency} {invoice.grand_total:,.2f}"
 
-    result = whatsapp_service.send_document(
+    result = wa_svc.send_document(
         chat_id=chat_id,
         pdf_bytes=pdf_bytes,
         filename=f"{doc_label.lower().replace(' ', '_')}_{invoice.invoice_number}.pdf",

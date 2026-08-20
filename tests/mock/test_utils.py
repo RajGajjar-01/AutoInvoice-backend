@@ -66,7 +66,11 @@ class TestExceptions:
         except ZeroDivisionError:
             pass
 
-    def test_root_health(self, client: TestClient):
+    def test_root_health(self, client: TestClient, monkeypatch):
+        async def mock_ok():
+            return None
+        monkeypatch.setattr("app.main._check_postgres", mock_ok)
+        monkeypatch.setattr("app.main._check_redis", mock_ok)
         r = client.get("/health")
         assert r.status_code == 200
         assert r.json()["status"] == "healthy"
