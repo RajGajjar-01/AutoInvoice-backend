@@ -33,7 +33,7 @@ dev = [
     "ruff<1.0.0,>=0.2.2",
     "prek>=0.2.24,<1.0.0",
     "coverage<8.0.0,>=7.4.3",
-    "httpx2>=2.0.0,<3.0.0",
+    "pytest-timeout>=2.4.0",
 ]
 
 [build-system]
@@ -77,6 +77,9 @@ ignore = [
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["app"]

@@ -48,6 +48,7 @@ class TestSignup:
         monkeypatch.setattr(
             "app.api.routes.auth.security.create_refresh_token", lambda **kw: "refresh"
         )
+        monkeypatch.setattr("app.api.routes.auth.send_email", lambda **kw: None)
 
         r = client.post(
             f"{settings.API_V1_STR}/auth/signup",
