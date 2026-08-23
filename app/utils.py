@@ -1,11 +1,10 @@
 import io
-import logging
 from typing import Any
 
+import structlog
 from openpyxl import load_workbook
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 COLUMN_MAPPING = {
@@ -171,5 +170,5 @@ def parse_excel_file(file_content: bytes) -> dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error(f"Error parsing Excel file: {e}")
+        logger.error("Error parsing Excel file", error=str(e))
         return {"error": str(e), "columns": [], "data": []}

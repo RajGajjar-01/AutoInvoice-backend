@@ -1,9 +1,9 @@
 import asyncio
-import logging
 from collections.abc import Coroutine
 from typing import Any
 
 import sentry_sdk
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
@@ -15,6 +15,7 @@ from starlette.middleware.cors import CORSMiddleware
 from app.api.main import api_router
 from app.core.config import settings
 from app.core.db import async_engine
+from app.core.logging import setup_logging
 from app.core.rate_limit import limiter
 from app.core.redis import redis_client
 from app.exceptions import (
@@ -24,9 +25,12 @@ from app.exceptions import (
     RateLimitError,
     ValidationError,
 )
+from app.middleware.request_context import RequestContextMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 
-logger = logging.getLogger(__name__)
+setup_logging()
+
+logger = structlog.get_logger(__name__)
 
 SENSITIVE_KEYS = {
     "password",
@@ -93,9 +97,7 @@ if settings.SENTRY_DSN:
         before_send=_scrub_sentry_event,
         traces_sample_rate=1.0 if settings.ENVIRONMENT != "production" else 0.2,
     )
-    logger.info(
-        "Sentry initialized with PII scrubber for environment: %s", settings.ENVIRONMENT
-    )
+    logger.info("Sentry initialized", environment=settings.ENVIRONMENT)
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -131,7 +133,7 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Res
 
 @app.exception_handler(RateLimitError)
 async def rate_limit_error_handler(request: Request, exc: RateLimitError) -> JSONResponse:
-    logger.warning(f"Rate limit error: {exc.message}")
+    logger.warning("Rate limit error", message=exc.message)
     return JSONResponse(
         status_code=429,
         content={"detail": exc.message, "code": exc.code},
@@ -180,6 +182,8 @@ if settings.all_cors_origins:
     )
 
 app.add_middleware(SecurityHeadersMiddleware)
+# Last-added middleware is outermost: request IDs wrap every other layer.
+app.add_middleware(RequestContextMiddleware)
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
@@ -198,7 +202,7 @@ async def _probe(name: str, check: Coroutine[Any, Any, None]) -> tuple[str, str]
         await asyncio.wait_for(check, timeout=3)
         return name, "ok"
     except Exception as exc:
-        logger.warning("Health check: %s unreachable: %s", name, exc)
+        logger.warning("Health check probe failed", check=name, error=str(exc))
         return name, "unreachable"
 
 

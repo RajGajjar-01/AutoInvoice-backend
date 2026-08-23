@@ -1,11 +1,9 @@
-import logging
-
+import structlog
 from sqlmodel import Session
 
 from app.core.db import engine, init_db
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def init() -> None:
