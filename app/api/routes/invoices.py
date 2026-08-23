@@ -12,6 +12,7 @@ from app.api.deps import (
     WhatsAppServiceDep,
 )
 from app.exceptions import NotFoundError
+from app.models import CompanySettings, Invoice
 from app.schemas import (
     DashboardStats,
     DocumentType,
@@ -98,6 +99,31 @@ async def delete_invoice(
     await invoice_service.delete(id, current_user.id)
 
 
+def _document_label(invoice: Invoice) -> str:
+    dt = (
+        invoice.document_type.value
+        if hasattr(invoice.document_type, "value")
+        else invoice.document_type
+    )
+    return document_title_for(dt)
+
+
+def _pdf_filename(doc_label: str, invoice_number: str) -> str:
+    return f"{doc_label.lower().replace(' ', '_')}_{invoice_number}.pdf"
+
+
+def _resolve_whatsapp_service(
+    default: WhatsAppService, company: CompanySettings
+) -> WhatsAppService:
+    if company.whatsapp_enabled and company.openwa_api_key and company.openwa_session_id:
+        return WhatsAppService(
+            base_url=company.openwa_base_url,
+            api_key=company.openwa_api_key,
+            session_id=company.openwa_session_id,
+        )
+    return default
+
+
 @router.post("/{id}/send-email", status_code=200)
 async def send_invoice_email(
     *,
@@ -119,12 +145,7 @@ async def send_invoice_email(
     company = await company_settings_service.get_for_owner(current_user.id)
     pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
 
-    dt = (
-        invoice.document_type.value
-        if hasattr(invoice.document_type, "value")
-        else invoice.document_type
-    )
-    doc_label = document_title_for(dt)
+    doc_label = _document_label(invoice)
 
     subject = req.subject or f"{doc_label} {invoice.invoice_number} from {company.name}"
     html_content = f"""<p>Dear {invoice.customer.name},</p>
@@ -141,7 +162,7 @@ Due Date: {invoice.due_date or "N/A"}</p>
         subject=subject,
         html_content=html_content,
         attachment=(
-            f"{doc_label.lower().replace(' ', '_')}_{invoice.invoice_number}.pdf",
+            _pdf_filename(doc_label, invoice.invoice_number),
             pdf_bytes,
             "application/pdf",
         ),
@@ -167,30 +188,14 @@ async def send_invoice_whatsapp(
     company = await company_settings_service.get_for_owner(current_user.id)
     pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
 
-    dt = (
-        invoice.document_type.value
-        if hasattr(invoice.document_type, "value")
-        else invoice.document_type
-    )
-    doc_label = document_title_for(dt)
-
-    wa_svc = whatsapp_service
-    if (
-        company.whatsapp_enabled
-        and company.openwa_api_key
-        and company.openwa_session_id
-    ):
-        wa_svc = WhatsAppService(
-            base_url=company.openwa_base_url,
-            api_key=company.openwa_api_key,
-            session_id=company.openwa_session_id,
-        )
+    doc_label = _document_label(invoice)
+    wa_svc = _resolve_whatsapp_service(whatsapp_service, company)
 
     chat_id = f"{req.to_phone.lstrip('+')}@c.us"
     result = wa_svc.send_document(
         chat_id=chat_id,
         pdf_bytes=pdf_bytes,
-        filename=f"{doc_label.lower().replace(' ', '_')}_{invoice.invoice_number}.pdf",
+        filename=_pdf_filename(doc_label, invoice.invoice_number),
         caption=f"{doc_label} {invoice.invoice_number} - {invoice.currency} {invoice.grand_total:,.2f}",
     )
     return {"message": "WhatsApp message sent", "message_id": result.get("messageId")}
@@ -214,24 +219,8 @@ async def send_invoice_reminder(
     company = await company_settings_service.get_for_owner(current_user.id)
     pdf_bytes = pdf_service.generate(invoice, invoice.customer, company)
 
-    dt = (
-        invoice.document_type.value
-        if hasattr(invoice.document_type, "value")
-        else invoice.document_type
-    )
-    doc_label = document_title_for(dt)
-
-    wa_svc = whatsapp_service
-    if (
-        company.whatsapp_enabled
-        and company.openwa_api_key
-        and company.openwa_session_id
-    ):
-        wa_svc = WhatsAppService(
-            base_url=company.openwa_base_url,
-            api_key=company.openwa_api_key,
-            session_id=company.openwa_session_id,
-        )
+    doc_label = _document_label(invoice)
+    wa_svc = _resolve_whatsapp_service(whatsapp_service, company)
 
     chat_id = f"{req.to_phone.lstrip('+')}@c.us"
 
@@ -243,7 +232,7 @@ async def send_invoice_reminder(
     result = wa_svc.send_document(
         chat_id=chat_id,
         pdf_bytes=pdf_bytes,
-        filename=f"{doc_label.lower().replace(' ', '_')}_{invoice.invoice_number}.pdf",
+        filename=_pdf_filename(doc_label, invoice.invoice_number),
         caption=caption,
     )
     return {"message": "Reminder sent", "message_id": result.get("messageId")}
