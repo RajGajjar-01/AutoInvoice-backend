@@ -2,7 +2,7 @@ import base64
 import hashlib
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -16,6 +16,7 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 
 from app.core.config import settings
+from app.core.time import get_datetime_utc
 
 password_hash = PasswordHash((Argon2Hasher(),))
 
@@ -152,9 +153,9 @@ def create_access_token(
     subject: str | Any, expires_delta: timedelta | None = None
 ) -> str:
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = get_datetime_utc() + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(
+        expire = get_datetime_utc() + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
     to_encode = {"exp": expire, "sub": str(subject), "type": "access"}
@@ -162,7 +163,7 @@ def create_access_token(
 
 
 def create_refresh_token(subject: str | Any) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = get_datetime_utc() + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
     to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}

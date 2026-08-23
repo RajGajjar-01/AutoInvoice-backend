@@ -1,7 +1,7 @@
 import base64
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -12,6 +12,7 @@ from jwt.exceptions import InvalidTokenError
 
 from app.core import security
 from app.core.config import settings
+from app.core.time import get_datetime_utc
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ def generate_verify_email(email_to: str, username: str, code: str) -> EmailData:
 
 def generate_password_reset_token(email: str) -> str:
     delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
-    now = datetime.now(timezone.utc)
+    now = get_datetime_utc()
     expires = now + delta
     return jwt.encode(
         {"exp": expires.timestamp(), "nbf": now, "sub": email},
