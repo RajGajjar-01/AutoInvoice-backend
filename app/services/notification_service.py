@@ -1,7 +1,7 @@
 import uuid
 
-from app.exceptions import ForbiddenError, NotFoundError
 from app.models import Notification
+from app.repositories.base import get_owned
 from app.repositories.notification_repository import NotificationRepository
 from app.schemas import NotificationCreate, NotificationType, NotificationUpdate
 
@@ -13,12 +13,9 @@ class NotificationService:
     async def get_owned(
         self, notification_id: uuid.UUID, owner_id: uuid.UUID
     ) -> Notification:
-        notification = await self.repo.get(notification_id)
-        if not notification:
-            raise NotFoundError("Notification not found")
-        if notification.owner_id != owner_id:
-            raise ForbiddenError("Not enough permissions")
-        return notification
+        return await get_owned(
+            self.repo, notification_id, owner_id, "Notification not found"
+        )
 
     async def list_items(
         self,

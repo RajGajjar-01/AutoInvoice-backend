@@ -4,6 +4,7 @@ from typing import Any
 from app.core.time import get_datetime_utc
 from app.exceptions import ForbiddenError, NotFoundError
 from app.models import Invoice
+from app.repositories.base import get_owned
 from app.repositories.customer_repository import CustomerRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.schemas import InvoiceCreate, InvoiceUpdate
@@ -19,12 +20,7 @@ class InvoiceService:
         self.customer_repo = customer_repo
 
     async def get_owned(self, invoice_id: uuid.UUID, owner_id: uuid.UUID) -> Invoice:
-        invoice = await self.repo.get(invoice_id)
-        if not invoice:
-            raise NotFoundError("Invoice not found")
-        if invoice.owner_id != owner_id:
-            raise ForbiddenError("Not enough permissions")
-        return invoice
+        return await get_owned(self.repo, invoice_id, owner_id, "Invoice not found")
 
     async def get_with_customer(
         self, invoice_id: uuid.UUID, owner_id: uuid.UUID

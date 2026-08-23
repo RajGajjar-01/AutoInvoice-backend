@@ -1,8 +1,9 @@
 import uuid
 
 from app.core.time import get_datetime_utc
-from app.exceptions import ForbiddenError, NotFoundError, ValidationError
+from app.exceptions import NotFoundError, ValidationError
 from app.models import InvoiceTemplate
+from app.repositories.base import get_owned
 from app.repositories.invoice_template_repository import InvoiceTemplateRepository
 from app.schemas import (
     InvoiceTemplateCreate,
@@ -85,12 +86,9 @@ class InvoiceTemplateService:
     async def get_owned(
         self, template_id: uuid.UUID, owner_id: uuid.UUID
     ) -> InvoiceTemplate:
-        template = await self.repo.get(template_id)
-        if not template:
-            raise NotFoundError("Invoice template not found")
-        if template.owner_id != owner_id:
-            raise ForbiddenError("Not enough permissions")
-        return template
+        return await get_owned(
+            self.repo, template_id, owner_id, "Invoice template not found"
+        )
 
     async def list_items(
         self, owner_id: uuid.UUID, *, skip: int, limit: int

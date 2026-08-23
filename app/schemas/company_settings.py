@@ -12,6 +12,66 @@ BANK_ACCOUNT_REGEX = re.compile(r"^[0-9]{9,18}$")
 UPI_ID_REGEX = re.compile(r"^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$")
 
 
+def _normalize_gstin(v: str | None) -> str | None:
+    if v is None or not str(v).strip():
+        return None
+    v_clean = str(v).strip().upper()
+    if not GSTIN_REGEX.match(v_clean):
+        raise ValueError(
+            "Invalid GSTIN format. Expected 15 characters (e.g. 22AAAAA0000A1Z5)"
+        )
+    return v_clean
+
+
+def _normalize_pan(v: str | None) -> str | None:
+    if v is None or not str(v).strip():
+        return None
+    v_clean = str(v).strip().upper()
+    # If it's already an encrypted string (e.g. during internal validation), allow it
+    if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
+        return v
+    if not PAN_REGEX.match(v_clean):
+        raise ValueError(
+            "Invalid PAN format. Expected 10 alphanumeric characters (e.g. ABCDE1234F)"
+        )
+    return v_clean
+
+
+def _normalize_bank_ifsc(v: str | None) -> str | None:
+    if v is None or not str(v).strip():
+        return None
+    v_clean = str(v).strip().upper()
+    if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
+        return v
+    if not IFSC_REGEX.match(v_clean):
+        raise ValueError(
+            "Invalid IFSC format. Expected 11 characters (e.g. SBIN0001234)"
+        )
+    return v_clean
+
+
+def _normalize_bank_account(v: str | None) -> str | None:
+    if v is None or not str(v).strip():
+        return None
+    v_clean = str(v).strip()
+    if v_clean.startswith("v1:") or v_clean.startswith("gAAAAA"):
+        return v
+    if not BANK_ACCOUNT_REGEX.match(v_clean):
+        raise ValueError("Invalid bank account number. Expected 9 to 18 numeric digits")
+    return v_clean
+
+
+def _normalize_upi_id(v: str | None) -> str | None:
+    if v is None or not str(v).strip():
+        return None
+    v_clean = str(v).strip().lower()
+    if v_clean.startswith("v1:") or v_clean.startswith("gaaaaa"):
+        return v
+    if not UPI_ID_REGEX.match(v_clean):
+        raise ValueError("Invalid UPI ID format (e.g. username@okhdfcbank)")
+    return v_clean
+
+
 class CompanySettingsBase(SQLModel):
     name: str = Field(min_length=1, max_length=255)
     gstin: str | None = Field(default=None, max_length=50)
@@ -49,72 +109,17 @@ class CompanySettingsBase(SQLModel):
     emails_from_email: str | None = Field(default=None, max_length=255)
     emails_from_name: str | None = Field(default=None, max_length=255)
 
-    @field_validator("gstin", mode="before")
-    @classmethod
-    def validate_gstin(cls, v: str | None) -> str | None:
-        if not v or not str(v).strip():
-            return None
-        v_clean = str(v).strip().upper()
-        if not GSTIN_REGEX.match(v_clean):
-            raise ValueError(
-                "Invalid GSTIN format. Expected 15 characters (e.g. 22AAAAA0000A1Z5)"
-            )
-        return v_clean
-
-    @field_validator("pan", mode="before")
-    @classmethod
-    def validate_pan(cls, v: str | None) -> str | None:
-        if not v or not str(v).strip():
-            return None
-        v_clean = str(v).strip().upper()
-        # If it's already an encrypted string (e.g. during internal validation), allow it
-        if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
-            return v
-        if not PAN_REGEX.match(v_clean):
-            raise ValueError(
-                "Invalid PAN format. Expected 10 alphanumeric characters (e.g. ABCDE1234F)"
-            )
-        return v_clean
-
-    @field_validator("bank_ifsc", mode="before")
-    @classmethod
-    def validate_bank_ifsc(cls, v: str | None) -> str | None:
-        if not v or not str(v).strip():
-            return None
-        v_clean = str(v).strip().upper()
-        if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
-            return v
-        if not IFSC_REGEX.match(v_clean):
-            raise ValueError(
-                "Invalid IFSC format. Expected 11 characters (e.g. SBIN0001234)"
-            )
-        return v_clean
-
-    @field_validator("bank_account", mode="before")
-    @classmethod
-    def validate_bank_account(cls, v: str | None) -> str | None:
-        if not v or not str(v).strip():
-            return None
-        v_clean = str(v).strip()
-        if v_clean.startswith("v1:") or v_clean.startswith("gAAAAA"):
-            return v
-        if not BANK_ACCOUNT_REGEX.match(v_clean):
-            raise ValueError(
-                "Invalid bank account number. Expected 9 to 18 numeric digits"
-            )
-        return v_clean
-
-    @field_validator("upi_id", mode="before")
-    @classmethod
-    def validate_upi_id(cls, v: str | None) -> str | None:
-        if not v or not str(v).strip():
-            return None
-        v_clean = str(v).strip().lower()
-        if v_clean.startswith("v1:") or v_clean.startswith("gaaaaa"):
-            return v
-        if not UPI_ID_REGEX.match(v_clean):
-            raise ValueError("Invalid UPI ID format (e.g. username@okhdfcbank)")
-        return v_clean
+    _validate_gstin = field_validator("gstin", mode="before")(staticmethod(_normalize_gstin))
+    _validate_pan = field_validator("pan", mode="before")(staticmethod(_normalize_pan))
+    _validate_bank_ifsc = field_validator("bank_ifsc", mode="before")(
+        staticmethod(_normalize_bank_ifsc)
+    )
+    _validate_bank_account = field_validator("bank_account", mode="before")(
+        staticmethod(_normalize_bank_account)
+    )
+    _validate_upi_id = field_validator("upi_id", mode="before")(
+        staticmethod(_normalize_upi_id)
+    )
 
 
 class CompanySettingsCreate(CompanySettingsBase):

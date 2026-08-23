@@ -1,8 +1,8 @@
 import uuid
 
 from app.core.time import get_datetime_utc
-from app.exceptions import ForbiddenError, NotFoundError
 from app.models import Customer
+from app.repositories.base import get_owned
 from app.repositories.customer_repository import CustomerRepository
 from app.schemas import CustomerCreate, CustomerUpdate
 
@@ -12,12 +12,7 @@ class CustomerService:
         self.repo = repo
 
     async def get_owned(self, customer_id: uuid.UUID, owner_id: uuid.UUID) -> Customer:
-        customer = await self.repo.get(customer_id)
-        if not customer:
-            raise NotFoundError("Customer not found")
-        if customer.owner_id != owner_id:
-            raise ForbiddenError("Not enough permissions")
-        return customer
+        return await get_owned(self.repo, customer_id, owner_id, "Customer not found")
 
     async def list_items(
         self, owner_id: uuid.UUID, *, skip: int, limit: int

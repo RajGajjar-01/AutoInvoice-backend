@@ -119,53 +119,29 @@ def get_current_active_superuser(current_user: CurrentUser) -> User:
 SuperUserDep = Annotated[User, Depends(get_current_active_superuser)]
 
 
-def get_user_repository(session: SessionDep) -> UserRepository:
-    return UserRepository(session)
-
-
-def get_user_service(
-    repo: Annotated[UserRepository, Depends(get_user_repository)],
-) -> UserService:
-    return UserService(repo)
+def get_user_service(session: SessionDep) -> UserService:
+    return UserService(UserRepository(session))
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 
 
-def get_item_repository(session: SessionDep) -> ItemRepository:
-    return ItemRepository(session)
-
-
-def get_item_service(
-    repo: Annotated[ItemRepository, Depends(get_item_repository)],
-) -> ItemService:
-    return ItemService(repo)
+def get_item_service(session: SessionDep) -> ItemService:
+    return ItemService(ItemRepository(session))
 
 
 ItemServiceDep = Annotated[ItemService, Depends(get_item_service)]
 
 
-def get_customer_repository(session: SessionDep) -> CustomerRepository:
-    return CustomerRepository(session)
-
-
-def get_customer_service(
-    repo: Annotated[CustomerRepository, Depends(get_customer_repository)],
-) -> CustomerService:
-    return CustomerService(repo)
+def get_customer_service(session: SessionDep) -> CustomerService:
+    return CustomerService(CustomerRepository(session))
 
 
 CustomerServiceDep = Annotated[CustomerService, Depends(get_customer_service)]
 
 
-def get_notification_repository(session: SessionDep) -> NotificationRepository:
-    return NotificationRepository(session)
-
-
-def get_notification_service(
-    repo: Annotated[NotificationRepository, Depends(get_notification_repository)],
-) -> NotificationService:
-    return NotificationService(repo)
+def get_notification_service(session: SessionDep) -> NotificationService:
+    return NotificationService(NotificationRepository(session))
 
 
 NotificationServiceDep = Annotated[
@@ -173,16 +149,8 @@ NotificationServiceDep = Annotated[
 ]
 
 
-def get_company_settings_repository(session: SessionDep) -> CompanySettingsRepository:
-    return CompanySettingsRepository(session)
-
-
-def get_company_settings_service(
-    repo: Annotated[
-        CompanySettingsRepository, Depends(get_company_settings_repository)
-    ],
-) -> CompanySettingsService:
-    return CompanySettingsService(repo)
+def get_company_settings_service(session: SessionDep) -> CompanySettingsService:
+    return CompanySettingsService(CompanySettingsRepository(session))
 
 
 CompanySettingsServiceDep = Annotated[
@@ -190,29 +158,15 @@ CompanySettingsServiceDep = Annotated[
 ]
 
 
-def get_table_repository(session: SessionDep) -> TableRepository:
-    return TableRepository(session)
-
-
-def get_table_service(
-    repo: Annotated[TableRepository, Depends(get_table_repository)],
-) -> TableService:
-    return TableService(repo)
+def get_table_service(session: SessionDep) -> TableService:
+    return TableService(TableRepository(session))
 
 
 TableServiceDep = Annotated[TableService, Depends(get_table_service)]
 
 
-def get_invoice_template_repository(session: SessionDep) -> InvoiceTemplateRepository:
-    return InvoiceTemplateRepository(session)
-
-
-def get_invoice_template_service(
-    repo: Annotated[
-        InvoiceTemplateRepository, Depends(get_invoice_template_repository)
-    ],
-) -> InvoiceTemplateService:
-    return InvoiceTemplateService(repo)
+def get_invoice_template_service(session: SessionDep) -> InvoiceTemplateService:
+    return InvoiceTemplateService(InvoiceTemplateRepository(session))
 
 
 InvoiceTemplateServiceDep = Annotated[
@@ -220,15 +174,8 @@ InvoiceTemplateServiceDep = Annotated[
 ]
 
 
-def get_invoice_repository(session: SessionDep) -> InvoiceRepository:
-    return InvoiceRepository(session)
-
-
-def get_invoice_service(
-    repo: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
-    customer_repo: Annotated[CustomerRepository, Depends(get_customer_repository)],
-) -> InvoiceService:
-    return InvoiceService(repo, customer_repo)
+def get_invoice_service(session: SessionDep) -> InvoiceService:
+    return InvoiceService(InvoiceRepository(session), CustomerRepository(session))
 
 
 InvoiceServiceDep = Annotated[InvoiceService, Depends(get_invoice_service)]

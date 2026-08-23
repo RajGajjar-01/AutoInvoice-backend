@@ -18,10 +18,10 @@ from app.core.db import async_engine
 from app.core.rate_limit import limiter
 from app.core.redis import redis_client
 from app.exceptions import (
-    AuthError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
+    RateLimitError,
     ValidationError,
 )
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -129,25 +129,12 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Res
     )
 
 
-@app.exception_handler(AuthError)
-async def auth_exception_handler(request: Request, exc: AuthError) -> JSONResponse:
-    logger.warning(f"Auth error: {exc.code} - {exc.message}")
-
-    status_map = {
-        "user_already_exists": 400,
-        "unauthorized": 403,
-        "mfa_required": 403,
-        "rate_limit_exceeded": 429,
-    }
-    status_code = status_map.get(exc.code, 401)
-
+@app.exception_handler(RateLimitError)
+async def rate_limit_error_handler(request: Request, exc: RateLimitError) -> JSONResponse:
+    logger.warning(f"Rate limit error: {exc.message}")
     return JSONResponse(
-        status_code=status_code,
-        content={
-            "detail": exc.message,
-            "code": exc.code,
-            **exc.details,
-        },
+        status_code=429,
+        content={"detail": exc.message, "code": exc.code},
     )
 
 

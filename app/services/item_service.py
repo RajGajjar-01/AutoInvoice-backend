@@ -1,8 +1,9 @@
 import uuid
 
 from app.core.time import get_datetime_utc
-from app.exceptions import ForbiddenError, NotFoundError, ValidationError
+from app.exceptions import ValidationError
 from app.models import Item
+from app.repositories.base import get_owned
 from app.repositories.item_repository import ItemRepository
 from app.schemas import ItemCreate, ItemUpdate
 
@@ -12,12 +13,7 @@ class ItemService:
         self.repo = repo
 
     async def get_owned(self, item_id: uuid.UUID, owner_id: uuid.UUID) -> Item:
-        item = await self.repo.get(item_id)
-        if not item:
-            raise NotFoundError("Item not found")
-        if item.owner_id != owner_id:
-            raise ForbiddenError("Not enough permissions")
-        return item
+        return await get_owned(self.repo, item_id, owner_id, "Item not found")
 
     async def list_items(
         self,
