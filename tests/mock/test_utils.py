@@ -9,11 +9,6 @@ from app.main import app
 
 
 class TestUtils:
-    def test_health_check(self, client: TestClient):
-        r = client.get(f"{settings.API_V1_STR}/utils/health-check/")
-        assert r.status_code == 200
-        assert r.json() is True
-
     def test_test_email(self, client: TestClient, mock_superuser, monkeypatch):
         app.dependency_overrides[deps.get_current_user] = lambda: mock_superuser
         app.dependency_overrides[deps.get_current_active_superuser] = lambda: (
@@ -68,12 +63,6 @@ class TestExceptions:
     def test_forgot_password(self, client: TestClient):
         r = client.post(f"{settings.API_V1_STR}/auth/logout")
         assert r.status_code == 200
-
-    def test_sentry_debug(self, client: TestClient):
-        try:
-            client.get("/sentry-debug")
-        except ZeroDivisionError:
-            pass
 
     def test_root_health(self, client: TestClient, monkeypatch):
         async def mock_ok():

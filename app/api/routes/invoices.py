@@ -1,4 +1,3 @@
-import logging
 import uuid
 from typing import Any
 
@@ -29,8 +28,6 @@ from app.schemas import (
 from app.services.gmail_service import send_email as send_gmail_email
 from app.services.invoice_pdf_service import document_title_for
 from app.services.whatsapp_service import WhatsAppService
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 

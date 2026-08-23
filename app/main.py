@@ -217,11 +217,3 @@ async def health(request: Request) -> JSONResponse:
         status_code=200 if healthy else 503,
         content={"status": "healthy" if healthy else "unhealthy", "checks": checks},
     )
-
-
-# ⚠️  TEMPORARY — remove after verifying Sentry is working
-@app.get("/sentry-debug")
-async def sentry_debug() -> dict[str, str]:
-    """Intentionally triggers an error to verify Sentry is capturing events."""
-    _ = 1 / 0
-    return {"status": "unreachable"}
