@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     FRONTEND_HOST: str = ""
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
+    LOG_LEVEL: str = "INFO"
     PORT: int = 8000
 
     BACKEND_CORS_ORIGINS: Annotated[
