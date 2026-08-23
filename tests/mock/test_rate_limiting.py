@@ -53,6 +53,7 @@ class TestRateLimitingExempt:
             resp = client.get("/health")
             assert resp.status_code != 429, "Exempt path /health returned 429"
 
+
 class TestRateLimitingGlobal:
     """Global default_limits apply to all non-exempt routes."""
 

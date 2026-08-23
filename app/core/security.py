@@ -163,9 +163,7 @@ def create_access_token(
 
 
 def create_refresh_token(subject: str | Any) -> str:
-    expire = get_datetime_utc() + timedelta(
-        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-    )
+    expire = get_datetime_utc() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 

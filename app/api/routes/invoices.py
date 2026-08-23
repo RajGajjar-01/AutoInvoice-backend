@@ -115,7 +115,11 @@ def _pdf_filename(doc_label: str, invoice_number: str) -> str:
 def _resolve_whatsapp_service(
     default: WhatsAppService, company: CompanySettings
 ) -> WhatsAppService:
-    if company.whatsapp_enabled and company.openwa_api_key and company.openwa_session_id:
+    if (
+        company.whatsapp_enabled
+        and company.openwa_api_key
+        and company.openwa_session_id
+    ):
         return WhatsAppService(
             base_url=company.openwa_base_url,
             api_key=company.openwa_api_key,

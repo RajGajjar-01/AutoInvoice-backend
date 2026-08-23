@@ -109,7 +109,9 @@ class CompanySettingsBase(SQLModel):
     emails_from_email: str | None = Field(default=None, max_length=255)
     emails_from_name: str | None = Field(default=None, max_length=255)
 
-    _validate_gstin = field_validator("gstin", mode="before")(staticmethod(_normalize_gstin))
+    _validate_gstin = field_validator("gstin", mode="before")(
+        staticmethod(_normalize_gstin)
+    )
     _validate_pan = field_validator("pan", mode="before")(staticmethod(_normalize_pan))
     _validate_bank_ifsc = field_validator("bank_ifsc", mode="before")(
         staticmethod(_normalize_bank_ifsc)

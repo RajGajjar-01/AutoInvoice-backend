@@ -132,7 +132,9 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Res
 
 
 @app.exception_handler(RateLimitError)
-async def rate_limit_error_handler(request: Request, exc: RateLimitError) -> JSONResponse:
+async def rate_limit_error_handler(
+    request: Request, exc: RateLimitError
+) -> JSONResponse:
     logger.warning("Rate limit error", message=exc.message)
     return JSONResponse(
         status_code=429,
