@@ -27,7 +27,6 @@ def _normalize_pan(v: str | None) -> str | None:
     if v is None or not str(v).strip():
         return None
     v_clean = str(v).strip().upper()
-    # If it's already an encrypted string (e.g. during internal validation), allow it
     if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
         return v
     if not PAN_REGEX.match(v_clean):
@@ -238,12 +237,10 @@ class CompanySettingsPublic(CompanySettingsBase):
     created_at: datetime
     updated_at: datetime
 
-    # Never expose secrets in responses.
     smtp_password: str | None = Field(default=None, exclude=True)
     openwa_api_key: str | None = Field(default=None, exclude=True)
     openwa_session_id: str | None = Field(default=None, exclude=True)
 
-    # Expose only whether each credential is configured.
     smtp_password_set: bool = False
     openwa_api_key_set: bool = False
     openwa_session_id_set: bool = False

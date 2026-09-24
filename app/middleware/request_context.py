@@ -1,5 +1,3 @@
-"""Binds a unique request ID to every log record emitted while handling a request."""
-
 import uuid
 
 import structlog
@@ -15,8 +13,6 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         request_id = request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
-        # Context vars are copied per asyncio task, so requests cannot bleed
-        # into each other; binding here scopes these keys to this request.
         structlog.contextvars.bind_contextvars(
             request_id=request_id,
             http_method=request.method,

@@ -184,7 +184,6 @@ if settings.all_cors_origins:
     )
 
 app.add_middleware(SecurityHeadersMiddleware)
-# Last-added middleware is outermost: request IDs wrap every other layer.
 app.add_middleware(RequestContextMiddleware)
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
@@ -211,8 +210,8 @@ async def _probe(name: str, check: Coroutine[Any, Any, None]) -> tuple[str, str]
 @app.get("/health")
 @limiter.exempt  # type: ignore[untyped-decorator]
 async def health(request: Request) -> JSONResponse:
+    """Verify DB and Redis connectivity."""
     _ = request
-    """Health check endpoint for Railway and Docker - verifies DB and Redis connectivity."""
     results = await asyncio.gather(
         _probe("postgres", _check_postgres()),
         _probe("redis", _check_redis()),

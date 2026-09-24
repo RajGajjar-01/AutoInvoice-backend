@@ -53,7 +53,6 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "AutoInvoice"
     SENTRY_DSN: str | None = None
 
-    # Support Railway's DATABASE_URL directly
     DATABASE_URL: str | None = None
 
     POSTGRES_SERVER: str = ""
@@ -78,9 +77,7 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
-        # Prefer DATABASE_URL if set (Railway provides this)
         if self.DATABASE_URL:
-            # Convert postgres:// to postgresql+psycopg:// for async
             db_url = self.DATABASE_URL
             if db_url.startswith("postgres://"):
                 db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
@@ -88,7 +85,6 @@ class Settings(BaseSettings):
                 db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
             return db_url
 
-        # Otherwise construct from individual vars
         return str(
             PostgresDsn.build(
                 scheme="postgresql+psycopg",
@@ -100,7 +96,6 @@ class Settings(BaseSettings):
             )
         )
 
-    # Brevo (transactional/system emails: password reset, new account, test email)
     BREVO_API_KEY: str | None = None
     EMAILS_FROM_EMAIL: EmailStr | None = None
     EMAILS_FROM_NAME: str | None = None
@@ -111,7 +106,6 @@ class Settings(BaseSettings):
             self.EMAILS_FROM_NAME = self.PROJECT_NAME
         return self
 
-    # Google OAuth (Gmail send-as-user: sending invoices from the user's own inbox)
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/google/callback"

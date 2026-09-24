@@ -1,8 +1,5 @@
-"""Centralized application logging built on structlog.
-
-JSON output in staging/production, colored console output locally. Stdlib
-records (uvicorn, gunicorn, third-party) are routed through the same
-pipeline via ProcessorFormatter so every log line has one shape.
+"""Centralized structlog setup: JSON in prod, colored console locally.
+Stdlib loggers (uvicorn, gunicorn) are routed through the same pipeline.
 """
 
 import logging
@@ -47,7 +44,6 @@ def setup_logging() -> None:
     root_logger.addHandler(handler)
     root_logger.setLevel(settings.LOG_LEVEL.upper())
 
-    # Framework loggers must flow through the root handler, not their own.
     for name in (
         "uvicorn",
         "uvicorn.error",

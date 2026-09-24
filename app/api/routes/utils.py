@@ -14,9 +14,7 @@ router = APIRouter(prefix="/utils", tags=["utils"])
     status_code=201,
 )
 def test_email(email_to: EmailStr, background_tasks: BackgroundTasks) -> Message:
-    """
-    Test emails.
-    """
+    """Send a test email."""
     email_data = generate_test_email(email_to=email_to)
     background_tasks.add_task(
         send_email,

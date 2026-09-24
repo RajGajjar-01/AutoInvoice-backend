@@ -83,7 +83,7 @@ def encrypt_field(owner_id: uuid.UUID | str, plaintext: str | None) -> str | Non
         return ""
     key = derive_tenant_key(owner_id)
     aesgcm = AESGCM(key)
-    nonce = os.urandom(12)  # 96-bit nonce
+    nonce = os.urandom(12)
     ciphertext = aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
     return "v1:" + base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
 
@@ -107,7 +107,6 @@ def decrypt_field(owner_id: uuid.UUID | str, ciphertext_str: str | None) -> str 
                 continue
         raise ValueError("Failed to decrypt field with available encryption keys")
 
-    # Legacy Fernet fallback
     if ciphertext_str.startswith("gAAAAA"):
         for master_k in _get_all_master_keys():
             try:
@@ -116,7 +115,6 @@ def decrypt_field(owner_id: uuid.UUID | str, ciphertext_str: str | None) -> str 
                 return f.decrypt(ciphertext_str.encode("ascii")).decode("utf-8")
             except (InvalidToken, ValueError):
                 continue
-        # Also try legacy SECRET_KEY sha256 derivation
         try:
             legacy_key = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
             f = Fernet(base64.urlsafe_b64encode(legacy_key))

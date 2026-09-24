@@ -56,8 +56,10 @@ EXPOSE $PORT
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:$PORT/health', timeout=5)" || exit 1
 
+# exec replaces the shell with gunicorn as PID 1, so SIGTERM reaches it
+# directly for a clean graceful shutdown instead of being handled by sh.
 CMD alembic upgrade head && python -m app.initial_data && \
-    gunicorn app.main:app \
+    exec gunicorn app.main:app \
     --workers 2 \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind 0.0.0.0:$PORT \

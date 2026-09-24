@@ -11,72 +11,31 @@ from app.schemas import (
     InvoiceTemplateUpdate,
 )
 
+# Each template kind owns exactly one payload field; all the others must be empty.
+_KIND_FIELDS = {
+    InvoiceTemplateKind.built_in: "built_in_id",
+    InvoiceTemplateKind.custom: "custom_data",
+    InvoiceTemplateKind.imported_html: "imported_html",
+    InvoiceTemplateKind.imported_pdf: "imported_pdf_data_url",
+    InvoiceTemplateKind.imported_excel: "imported_excel_columns",
+}
+
 
 def _ensure_valid_payload(template: InvoiceTemplate) -> None:
-    if template.kind == InvoiceTemplateKind.built_in:
-        if not template.built_in_id:
-            raise ValidationError("built_in_id is required for kind=built_in")
-        if (
-            template.custom_data is not None
-            or template.imported_html
-            or template.imported_pdf_data_url
-        ):
-            raise ValidationError(
-                "built_in templates cannot include custom/imported data"
-            )
+    required_field = _KIND_FIELDS.get(template.kind)
+    if required_field is None:
+        return
 
-    if template.kind == InvoiceTemplateKind.custom:
-        if template.custom_data is None:
-            raise ValidationError("custom_data is required for kind=custom")
-        if (
-            template.built_in_id
-            or template.imported_html
-            or template.imported_pdf_data_url
-        ):
-            raise ValidationError(
-                "custom templates cannot include built_in/imported data"
-            )
+    if getattr(template, required_field) in (None, "", False):
+        raise ValidationError(
+            f"{required_field} is required for kind={template.kind}"
+        )
 
-    if template.kind == InvoiceTemplateKind.imported_html:
-        if not template.imported_html:
-            raise ValidationError("imported_html is required for kind=imported_html")
-        if (
-            template.built_in_id
-            or template.custom_data is not None
-            or template.imported_pdf_data_url
-        ):
-            raise ValidationError(
-                "imported_html templates cannot include other template data"
-            )
-
-    if template.kind == InvoiceTemplateKind.imported_pdf:
-        if not template.imported_pdf_data_url:
-            raise ValidationError(
-                "imported_pdf_data_url is required for kind=imported_pdf"
-            )
-        if (
-            template.built_in_id
-            or template.custom_data is not None
-            or template.imported_html
-        ):
-            raise ValidationError(
-                "imported_pdf templates cannot include other template data"
-            )
-
-    if template.kind == InvoiceTemplateKind.imported_excel:
-        if template.imported_excel_columns is None:
-            raise ValidationError(
-                "imported_excel_columns is required for kind=imported_excel"
-            )
-        if (
-            template.built_in_id
-            or template.custom_data is not None
-            or template.imported_html
-            or template.imported_pdf_data_url
-        ):
-            raise ValidationError(
-                "imported_excel templates cannot include other template data"
-            )
+    other_fields = [f for f in _KIND_FIELDS.values() if f != required_field]
+    if any(getattr(template, f) not in (None, "", False) for f in other_fields):
+        raise ValidationError(
+            f"{template.kind} templates cannot include other template data"
+        )
 
 
 class InvoiceTemplateService:
