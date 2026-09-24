@@ -1,4 +1,3 @@
-import base64
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -71,12 +70,3 @@ class InvoicePDFService:
 
         pdf_bytes = weasyprint.HTML(string=html).write_pdf()
         return pdf_bytes
-
-    def generate_base64(
-        self,
-        invoice: Invoice,
-        customer: Customer,
-        company: CompanySettings,
-    ) -> str:
-        pdf_bytes = self.generate(invoice, customer, company)
-        return base64.b64encode(pdf_bytes).decode("ascii")

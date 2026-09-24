@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from sqlmodel import col, func, select
+from sqlmodel import col, select
 
 from app.models import Item
 from app.repositories.base import BaseRepository
@@ -10,13 +10,6 @@ from app.schemas import ItemCreate
 
 class ItemRepository(BaseRepository[Item]):
     model = Item
-
-    async def get_by_id_and_owner(
-        self, item_id: uuid.UUID, owner_id: uuid.UUID
-    ) -> Item | None:
-        statement = select(Item).where(Item.id == item_id, Item.owner_id == owner_id)
-        result = await self.session.exec(statement)
-        return result.first()
 
     async def list_filtered(
         self,
@@ -50,19 +43,10 @@ class ItemRepository(BaseRepository[Item]):
         elif stock_status == "out_of_stock":
             base_filter = base_filter & (Item.stock == 0)
 
-        count_result = await self.session.exec(
-            select(func.count()).select_from(Item).where(base_filter)
-        )
-        count = count_result.one()
         statement = (
-            select(Item)
-            .where(base_filter)
-            .order_by(col(Item.created_at).desc())
-            .offset(skip)
-            .limit(limit)
+            select(Item).where(base_filter).order_by(col(Item.created_at).desc())
         )
-        result = await self.session.exec(statement)
-        return list(result.all()), count
+        return await self.paginate(statement, skip=skip, limit=limit)
 
     async def list_categories(self, owner_id: uuid.UUID) -> list[str]:
         statement = (

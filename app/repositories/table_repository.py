@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy.orm import selectinload
-from sqlmodel import col, func, select
+from sqlmodel import col, select
 
 from app.models import DataTable, TableReminder, TableRow
 from app.repositories.base import BaseRepository
@@ -59,13 +59,7 @@ class TableRepository(BaseRepository[DataTable]):
                 else col(DataTable.created_at).desc()
             )
 
-        count_statement = select(func.count()).select_from(statement.subquery())
-        count_result = await self.session.exec(count_statement)
-        total = count_result.one()
-
-        statement = statement.offset(skip).limit(limit)
-        result = await self.session.exec(statement)
-        return list(result.all()), total
+        return await self.paginate(statement, skip=skip, limit=limit)
 
     async def create(self, table_in: DataTableCreate, owner_id: uuid.UUID) -> DataTable:
         table_data = table_in.model_dump()

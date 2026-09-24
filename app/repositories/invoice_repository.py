@@ -11,15 +11,6 @@ from app.repositories.base import BaseRepository
 class InvoiceRepository(BaseRepository[Invoice]):
     model = Invoice
 
-    async def get_by_id_and_owner(
-        self, invoice_id: uuid.UUID, owner_id: uuid.UUID
-    ) -> Invoice | None:
-        statement = select(Invoice).where(
-            Invoice.id == invoice_id, Invoice.owner_id == owner_id
-        )
-        result = await self.session.exec(statement)
-        return result.first()
-
     async def get_with_customer(
         self, invoice_id: uuid.UUID, owner_id: uuid.UUID
     ) -> Invoice | None:
@@ -49,19 +40,10 @@ class InvoiceRepository(BaseRepository[Invoice]):
         if customer_id:
             base_filter = base_filter & (Invoice.customer_id == customer_id)
 
-        count_result = await self.session.exec(
-            select(func.count()).select_from(Invoice).where(base_filter)
-        )
-        count = count_result.one()
         statement = (
-            select(Invoice)
-            .where(base_filter)
-            .order_by(col(Invoice.created_at).desc())
-            .offset(skip)
-            .limit(limit)
+            select(Invoice).where(base_filter).order_by(col(Invoice.created_at).desc())
         )
-        result = await self.session.exec(statement)
-        return list(result.all()), count
+        return await self.paginate(statement, skip=skip, limit=limit)
 
     async def get_dashboard_stats(
         self, owner_id: uuid.UUID, document_type: str | None

@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import update as sa_update
-from sqlmodel import col, func, select
+from sqlmodel import col, select
 
 from app.core.time import get_datetime_utc
 from app.models import InvoiceTemplate
@@ -13,32 +13,15 @@ from app.schemas import InvoiceTemplateCreate
 class InvoiceTemplateRepository(BaseRepository[InvoiceTemplate]):
     model = InvoiceTemplate
 
-    async def get_by_id_and_owner(
-        self, template_id: uuid.UUID, owner_id: uuid.UUID
-    ) -> InvoiceTemplate | None:
-        statement = select(InvoiceTemplate).where(
-            InvoiceTemplate.id == template_id, InvoiceTemplate.owner_id == owner_id
-        )
-        result = await self.session.exec(statement)
-        return result.first()
-
     async def list_by_owner(
         self, owner_id: uuid.UUID, *, skip: int, limit: int
     ) -> tuple[list[InvoiceTemplate], int]:
-        base_filter = InvoiceTemplate.owner_id == owner_id
-        count_result = await self.session.exec(
-            select(func.count()).select_from(InvoiceTemplate).where(base_filter)
-        )
-        count = count_result.one()
         statement = (
             select(InvoiceTemplate)
-            .where(base_filter)
+            .where(InvoiceTemplate.owner_id == owner_id)
             .order_by(col(InvoiceTemplate.updated_at).desc())
-            .offset(skip)
-            .limit(limit)
         )
-        result = await self.session.exec(statement)
-        return list(result.all()), count
+        return await self.paginate(statement, skip=skip, limit=limit)
 
     async def get_active_by_owner(self, owner_id: uuid.UUID) -> InvoiceTemplate | None:
         statement = select(InvoiceTemplate).where(

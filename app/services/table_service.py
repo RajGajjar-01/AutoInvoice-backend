@@ -15,18 +15,12 @@ from app.schemas import (
 
 
 def _validate_row_data(
-    columns: list[Any], row_data: dict[str, Any]
+    columns: list[dict[str, Any]], row_data: dict[str, Any]
 ) -> tuple[bool, list[str]]:
     missing_fields = []
     for column in columns:
-        if isinstance(column, dict):
-            mandatory = column.get("mandatory", False)
-            col_name = column.get("name")
-        else:
-            mandatory = bool(getattr(column, "mandatory", False))
-            col_name = getattr(column, "name", None)
-
-        if mandatory and col_name:
+        col_name = column.get("name")
+        if column.get("mandatory", False) and col_name:
             if (
                 col_name not in row_data
                 or row_data[col_name] is None

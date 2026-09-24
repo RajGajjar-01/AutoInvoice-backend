@@ -1,13 +1,13 @@
 import base64
-import logging
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
 import httpx
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 
@@ -46,5 +46,5 @@ def send_email(
     )
     response.raise_for_status()
     result: dict[str, Any] = response.json()
-    logger.info(f"gmail send result: {result}")
+    logger.info("Gmail send completed", message_id=result.get("id"))
     return result

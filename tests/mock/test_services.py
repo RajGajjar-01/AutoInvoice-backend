@@ -135,13 +135,3 @@ class TestWhatsAppService:
         svc = WhatsAppService()
         with pytest.raises(httpx.HTTPStatusError):
             svc.send_document("919876@c.us", b"pdf")
-
-
-class TestInvoicePDFService:
-    def test_generate_base64(self):
-        from app.services.invoice_pdf_service import InvoicePDFService
-
-        svc = InvoicePDFService()
-        with patch.object(svc, "generate", return_value=b"pdf-bytes"):
-            result = svc.generate_base64(MagicMock(), MagicMock(), MagicMock())
-            assert result == base64.b64encode(b"pdf-bytes").decode("ascii")

@@ -1,7 +1,7 @@
-import logging
 from typing import Annotated, Any
 
 import jwt
+import structlog
 from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Request, Response
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import SQLModel
@@ -30,7 +30,7 @@ from app.services.email_service import (
     verify_password_reset_token,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -96,7 +96,7 @@ async def signup(
         )
     else:
         logger.warning(
-            f"[DEV / NO BREVO KEY] Verification code for {user.email}: {code}"
+            "[DEV / NO BREVO KEY] Verification code", email=user.email, code=code
         )
     access_token = security.create_access_token(subject=user.id)
     refresh_token = security.create_refresh_token(subject=user.id)
@@ -236,7 +236,9 @@ async def resend_verification_email(
         )
     else:
         logger.warning(
-            f"[DEV / NO BREVO KEY] Verification code for {current_user.email}: {code}"
+            "[DEV / NO BREVO KEY] Verification code",
+            email=current_user.email,
+            code=code,
         )
     return Message(message="Verification code resent")
 
@@ -267,7 +269,9 @@ async def forgot_password(
             )
         else:
             logger.warning(
-                f"[DEV / NO BREVO KEY] Password reset link for {user.email}: {settings.FRONTEND_HOST}/reset-password?token={password_reset_token}"
+                "[DEV / NO BREVO KEY] Password reset link",
+                email=user.email,
+                reset_url=f"{settings.FRONTEND_HOST}/reset-password?token={password_reset_token}",
             )
     return Message(
         message="If that email is registered, a password reset link has been sent"

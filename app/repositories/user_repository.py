@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlmodel import col, func, select
+from sqlmodel import col, select
 
 from app.models import User
 from app.repositories.base import BaseRepository
@@ -26,10 +26,5 @@ class UserRepository(BaseRepository[User]):
         return await self.add(db_user)
 
     async def list_paginated(self, *, skip: int, limit: int) -> tuple[list[User], int]:
-        count_result = await self.session.exec(select(func.count()).select_from(User))
-        count = count_result.one()
-        statement = (
-            select(User).order_by(col(User.created_at).desc()).offset(skip).limit(limit)
-        )
-        result = await self.session.exec(statement)
-        return list(result.all()), count
+        statement = select(User).order_by(col(User.created_at).desc())
+        return await self.paginate(statement, skip=skip, limit=limit)

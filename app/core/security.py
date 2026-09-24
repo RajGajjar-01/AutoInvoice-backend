@@ -2,7 +2,7 @@ import base64
 import hashlib
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -16,6 +16,7 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 
 from app.core.config import settings
+from app.core.time import get_datetime_utc
 
 password_hash = PasswordHash((Argon2Hasher(),))
 
@@ -82,7 +83,7 @@ def encrypt_field(owner_id: uuid.UUID | str, plaintext: str | None) -> str | Non
         return ""
     key = derive_tenant_key(owner_id)
     aesgcm = AESGCM(key)
-    nonce = os.urandom(12)  # 96-bit nonce
+    nonce = os.urandom(12)
     ciphertext = aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
     return "v1:" + base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
 
@@ -106,7 +107,6 @@ def decrypt_field(owner_id: uuid.UUID | str, ciphertext_str: str | None) -> str 
                 continue
         raise ValueError("Failed to decrypt field with available encryption keys")
 
-    # Legacy Fernet fallback
     if ciphertext_str.startswith("gAAAAA"):
         for master_k in _get_all_master_keys():
             try:
@@ -115,7 +115,6 @@ def decrypt_field(owner_id: uuid.UUID | str, ciphertext_str: str | None) -> str 
                 return f.decrypt(ciphertext_str.encode("ascii")).decode("utf-8")
             except (InvalidToken, ValueError):
                 continue
-        # Also try legacy SECRET_KEY sha256 derivation
         try:
             legacy_key = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
             f = Fernet(base64.urlsafe_b64encode(legacy_key))
@@ -152,9 +151,9 @@ def create_access_token(
     subject: str | Any, expires_delta: timedelta | None = None
 ) -> str:
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = get_datetime_utc() + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(
+        expire = get_datetime_utc() + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
     to_encode = {"exp": expire, "sub": str(subject), "type": "access"}
@@ -162,9 +161,7 @@ def create_access_token(
 
 
 def create_refresh_token(subject: str | Any) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-    )
+    expire = get_datetime_utc() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 

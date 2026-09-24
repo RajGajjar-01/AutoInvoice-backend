@@ -1,12 +1,9 @@
-import logging
 from typing import Any
 from urllib.parse import urlencode
 
 import httpx
 
 from app.core.config import settings
-
-logger = logging.getLogger(__name__)
 
 AUTH_BASE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"

@@ -1,11 +1,8 @@
 import base64
-import logging
 
 import httpx
 
 from app.core.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 class WhatsAppService:

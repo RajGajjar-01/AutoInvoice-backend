@@ -16,7 +16,6 @@ depends_on = None
 
 
 def upgrade():
-    # Alter column lengths to accommodate ciphertext strings (base64 ~120-200 chars)
     op.alter_column(
         "company_settings",
         "bank_account",

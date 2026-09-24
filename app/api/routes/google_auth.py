@@ -1,9 +1,9 @@
-import logging
 import uuid
 from datetime import timedelta
 
 import httpx
 import jwt
+import structlog
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from jwt.exceptions import InvalidTokenError
@@ -15,7 +15,7 @@ from app.core.time import get_datetime_utc
 from app.schemas import GoogleAuthUrl, GoogleStatus, Message
 from app.services import google_oauth_service
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/google", tags=["google"])
 

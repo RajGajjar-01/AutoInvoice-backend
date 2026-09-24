@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from sqlmodel import col, func, select
+from sqlmodel import col, select
 
 from app.models import Customer
 from app.repositories.base import BaseRepository
@@ -14,23 +14,12 @@ class CustomerRepository(BaseRepository[Customer]):
     async def list_by_owner(
         self, owner_id: uuid.UUID, *, skip: int, limit: int
     ) -> tuple[list[Customer], int]:
-        count_statement = (
-            select(func.count())
-            .select_from(Customer)
-            .where(Customer.owner_id == owner_id)
-        )
-        count_result = await self.session.exec(count_statement)
-        count = count_result.one()
-
         statement = (
             select(Customer)
             .where(Customer.owner_id == owner_id)
             .order_by(col(Customer.created_at).desc())
-            .offset(skip)
-            .limit(limit)
         )
-        result = await self.session.exec(statement)
-        return list(result.all()), count
+        return await self.paginate(statement, skip=skip, limit=limit)
 
     async def create(
         self, customer_in: CustomerCreate, owner_id: uuid.UUID

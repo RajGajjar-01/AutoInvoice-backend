@@ -28,11 +28,6 @@ class NotificationRepository(BaseRepository[Notification]):
         if type:
             base_filter = base_filter & (Notification.type == type)
 
-        count_result = await self.session.exec(
-            select(func.count()).select_from(Notification).where(base_filter)
-        )
-        count = count_result.one()
-
         unread_result = await self.session.exec(
             select(func.count())
             .select_from(Notification)
@@ -44,11 +39,9 @@ class NotificationRepository(BaseRepository[Notification]):
             select(Notification)
             .where(base_filter)
             .order_by(col(Notification.created_at).desc())
-            .offset(skip)
-            .limit(limit)
         )
-        result = await self.session.exec(statement)
-        return list(result.all()), count, unread_count
+        notifications, count = await self.paginate(statement, skip=skip, limit=limit)
+        return notifications, count, unread_count
 
     async def create(
         self, notification_in: NotificationCreate, owner_id: uuid.UUID

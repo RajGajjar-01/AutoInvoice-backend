@@ -27,7 +27,6 @@ def _normalize_pan(v: str | None) -> str | None:
     if v is None or not str(v).strip():
         return None
     v_clean = str(v).strip().upper()
-    # If it's already an encrypted string (e.g. during internal validation), allow it
     if v_clean.startswith("V1:") or v_clean.startswith("GAAAAA"):
         return v
     if not PAN_REGEX.match(v_clean):
@@ -109,7 +108,9 @@ class CompanySettingsBase(SQLModel):
     emails_from_email: str | None = Field(default=None, max_length=255)
     emails_from_name: str | None = Field(default=None, max_length=255)
 
-    _validate_gstin = field_validator("gstin", mode="before")(staticmethod(_normalize_gstin))
+    _validate_gstin = field_validator("gstin", mode="before")(
+        staticmethod(_normalize_gstin)
+    )
     _validate_pan = field_validator("pan", mode="before")(staticmethod(_normalize_pan))
     _validate_bank_ifsc = field_validator("bank_ifsc", mode="before")(
         staticmethod(_normalize_bank_ifsc)
@@ -236,12 +237,10 @@ class CompanySettingsPublic(CompanySettingsBase):
     created_at: datetime
     updated_at: datetime
 
-    # Never expose secrets in responses.
     smtp_password: str | None = Field(default=None, exclude=True)
     openwa_api_key: str | None = Field(default=None, exclude=True)
     openwa_session_id: str | None = Field(default=None, exclude=True)
 
-    # Expose only whether each credential is configured.
     smtp_password_set: bool = False
     openwa_api_key_set: bool = False
     openwa_session_id_set: bool = False

@@ -1,19 +1,20 @@
 import base64
-import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from pathlib import Path
 from string import Template
 from typing import Any
 
 import httpx
 import jwt
+import structlog
 from jwt.exceptions import InvalidTokenError
 
 from app.core import security
 from app.core.config import settings
+from app.core.time import get_datetime_utc
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 BREVO_SEND_URL = "https://api.brevo.com/v3/smtp/email"
 
@@ -65,7 +66,7 @@ def send_email(
         timeout=30,
     )
     response.raise_for_status()
-    logger.info(f"send email result: {response.json()}")
+    logger.info("Brevo email accepted", status=response.status_code)
 
 
 def generate_test_email(email_to: str) -> EmailData:
@@ -95,24 +96,6 @@ def generate_reset_password_email(email_to: str, email: str, token: str) -> Emai
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_new_account_email(
-    email_to: str, username: str, password: str | None = None
-) -> EmailData:
-    project_name = settings.PROJECT_NAME
-    subject = f"{project_name} - New account for user {username}"
-    html_content = render_email_template(
-        template_name="new_account.html",
-        context={
-            "project_name": settings.PROJECT_NAME,
-            "username": username,
-            "password": password,
-            "email": email_to,
-            "link": settings.FRONTEND_HOST,
-        },
-    )
-    return EmailData(html_content=html_content, subject=subject)
-
-
 def generate_verify_email(email_to: str, username: str, code: str) -> EmailData:
     project_name = settings.PROJECT_NAME
     subject = f"{project_name} - Your email verification code"
@@ -131,7 +114,7 @@ def generate_verify_email(email_to: str, username: str, code: str) -> EmailData:
 
 def generate_password_reset_token(email: str) -> str:
     delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
-    now = datetime.now(timezone.utc)
+    now = get_datetime_utc()
     expires = now + delta
     return jwt.encode(
         {"exp": expires.timestamp(), "nbf": now, "sub": email},

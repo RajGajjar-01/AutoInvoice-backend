@@ -34,7 +34,6 @@ class User(UserBase, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    # Google OAuth (used to send invoice emails from the user's own Gmail account)
     google_email: str | None = Field(default=None, max_length=255)
     google_access_token: str | None = Field(default=None, max_length=4096)
     google_refresh_token: str | None = Field(default=None, max_length=4096)
