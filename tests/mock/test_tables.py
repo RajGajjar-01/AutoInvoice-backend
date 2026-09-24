@@ -28,7 +28,7 @@ class TestTables:
     def test_list_tables(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.list_items = AsyncMock(return_value=([], 0))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/tables/")
@@ -37,7 +37,7 @@ class TestTables:
     def test_create_table(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.create = AsyncMock(return_value=_table())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.post(
@@ -53,7 +53,7 @@ class TestTables:
         mock_svc.create = AsyncMock(
             side_effect=ValidationError("Column names must be unique")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.post(
@@ -71,7 +71,7 @@ class TestTables:
     def test_get_table(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.get_table_with_rows = AsyncMock(return_value=_table())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/tables/{uuid.uuid4()}")
@@ -84,7 +84,7 @@ class TestTables:
         mock_svc.get_table_with_rows = AsyncMock(
             side_effect=NotFoundError("Table not found")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/tables/{uuid.uuid4()}")
@@ -93,7 +93,7 @@ class TestTables:
     def test_update_table(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(return_value=_table({"name": "Updated"}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.patch(
@@ -104,7 +104,7 @@ class TestTables:
     def test_delete_table(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(return_value=None)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/tables/{uuid.uuid4()}")
@@ -113,7 +113,7 @@ class TestTables:
     def test_duplicate_table(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.duplicate = AsyncMock(return_value=_table({"name": "Test (Copy)"}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.post(f"{settings.API_V1_STR}/tables/{uuid.uuid4()}/duplicate")
@@ -148,7 +148,7 @@ class TestTableRows:
     def test_create_row(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.add_row = AsyncMock(return_value=_row())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.post(
@@ -164,7 +164,7 @@ class TestTableRows:
         mock_svc.add_row = AsyncMock(
             side_effect=ValidationError("Missing mandatory fields: name")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.post(
@@ -176,7 +176,7 @@ class TestTableRows:
     def test_update_row(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.update_row = AsyncMock(return_value=_row())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.put(
@@ -188,7 +188,7 @@ class TestTableRows:
     def test_delete_row(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.delete_row = AsyncMock(return_value=None)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.delete(
@@ -199,7 +199,7 @@ class TestTableRows:
     def test_bulk_delete_rows(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.bulk_delete_rows = AsyncMock(return_value=2)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.post(
@@ -214,7 +214,7 @@ class TestTableReminders:
     def test_create_reminder(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.add_reminder = AsyncMock(return_value=_reminder())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.post(
@@ -226,7 +226,7 @@ class TestTableReminders:
     def test_delete_reminder(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.delete_reminder = AsyncMock(return_value=None)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_table_service] = lambda: mock_svc
 
         r = client.delete(

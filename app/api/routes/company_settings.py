@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from app.api.deps import CompanySettingsServiceDep, CurrentUser
+from app.api.deps import CompanySettingsServiceDep, CurrentPrincipal
 from app.schemas import (
     CompanySettingsCreate,
     CompanySettingsPublic,
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/company-settings", tags=["company-settings"])
 
 @router.get("/", response_model=CompanySettingsPublic)
 async def get_company_settings(
-    current_user: CurrentUser, company_settings_service: CompanySettingsServiceDep
+    current_user: CurrentPrincipal, company_settings_service: CompanySettingsServiceDep
 ) -> Any:
     settings = await company_settings_service.get_for_owner(current_user.id)
     return CompanySettingsPublic.from_model(settings)
@@ -23,7 +23,7 @@ async def get_company_settings(
 @router.post("/", response_model=CompanySettingsPublic, status_code=201)
 async def create_company_settings(
     *,
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     company_settings_service: CompanySettingsServiceDep,
     settings_in: CompanySettingsCreate,
 ) -> Any:
@@ -34,7 +34,7 @@ async def create_company_settings(
 @router.put("/", response_model=CompanySettingsPublic)
 async def update_company_settings(
     *,
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     company_settings_service: CompanySettingsServiceDep,
     settings_in: CompanySettingsUpdate,
 ) -> Any:
@@ -44,6 +44,6 @@ async def update_company_settings(
 
 @router.delete("/", status_code=204)
 async def delete_company_settings(
-    current_user: CurrentUser, company_settings_service: CompanySettingsServiceDep
+    current_user: CurrentPrincipal, company_settings_service: CompanySettingsServiceDep
 ) -> None:
     await company_settings_service.delete(current_user.id)

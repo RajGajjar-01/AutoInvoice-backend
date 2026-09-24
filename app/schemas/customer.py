@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 
+from pydantic import EmailStr
 from sqlalchemy import Column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
@@ -61,3 +62,10 @@ class CustomerPublic(CustomerBase):
 class CustomersPublic(SQLModel):
     data: list[CustomerPublic]
     count: int
+
+
+class CustomerSendEmailRequest(SQLModel):
+    to_email: EmailStr
+    subject: str = ""
+    message: str = ""
+    invoice_id: uuid.UUID | None = None

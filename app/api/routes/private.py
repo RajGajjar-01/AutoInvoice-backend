@@ -26,4 +26,4 @@ async def create_user(user_in: PrivateUserCreate, user_service: UserServiceDep) 
         is_superuser=user_in.is_superuser,
         is_verified=user_in.is_verified,
     )
-    return UserPublic.model_validate(user)
+    return UserPublic.from_user(user)

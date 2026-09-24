@@ -4,6 +4,7 @@ from pydantic import BaseModel, EmailStr
 class SendEmailRequest(BaseModel):
     to_email: EmailStr
     subject: str = ""
+    message: str = ""
 
 
 class SendWhatsAppRequest(BaseModel):

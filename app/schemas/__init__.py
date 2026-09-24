@@ -16,6 +16,7 @@ from app.schemas.company_settings import (
 from app.schemas.customer import (
     CustomerCreate,
     CustomerPublic,
+    CustomerSendEmailRequest,
     CustomersPublic,
     CustomerUpdate,
 )
@@ -63,6 +64,7 @@ from app.schemas.table import (
     TableRowUpdate,
 )
 from app.schemas.user import (
+    SetPassword,
     UpdatePassword,
     UserCreate,
     UserPublic,
@@ -81,6 +83,7 @@ __all__ = [
     "Token",
     "TokenPayload",
     "VerifyEmailRequest",
+    "SetPassword",
     "UpdatePassword",
     "UserCreate",
     "UserPublic",
@@ -94,6 +97,7 @@ __all__ = [
     "ItemUpdate",
     "CustomerCreate",
     "CustomerPublic",
+    "CustomerSendEmailRequest",
     "CustomersPublic",
     "CustomerUpdate",
     "DataTableColumn",

@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Query, status
 from pydantic import BaseModel
 
-from app.api.deps import CurrentUser, TableServiceDep
+from app.api.deps import CurrentPrincipal, TableServiceDep
 from app.schemas import (
     DataTableCreate,
     DataTablePublic,
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/tables", tags=["tables"])
 
 @router.get("", response_model=PaginatedResponse[DataTablePublic])
 async def list_tables(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
@@ -50,7 +50,7 @@ async def list_tables(
 
 @router.post("", response_model=DataTablePublic, status_code=status.HTTP_201_CREATED)
 async def create_table(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_create: DataTableCreate,
 ) -> Any:
@@ -59,7 +59,7 @@ async def create_table(
 
 @router.get("/{table_id}", response_model=DataTableWithRows)
 async def get_table(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
 ) -> Any:
@@ -68,7 +68,7 @@ async def get_table(
 
 @router.patch("/{table_id}", response_model=DataTablePublic)
 async def update_table(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
     table_update: DataTableUpdate,
@@ -78,7 +78,7 @@ async def update_table(
 
 @router.delete("/{table_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_table(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
 ) -> None:
@@ -87,7 +87,7 @@ async def delete_table(
 
 @router.post("/{table_id}/duplicate", response_model=DataTablePublic)
 async def duplicate_table(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
 ) -> Any:
@@ -100,7 +100,7 @@ async def duplicate_table(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_table_row(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
     row_create: TableRowCreate,
@@ -110,7 +110,7 @@ async def create_table_row(
 
 @router.put("/{table_id}/rows/{row_id}", response_model=TableRowPublic)
 async def update_table_row(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
     row_id: uuid.UUID,
@@ -121,7 +121,7 @@ async def update_table_row(
 
 @router.delete("/{table_id}/rows/{row_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_table_row(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
     row_id: uuid.UUID,
@@ -135,7 +135,7 @@ class BulkDeleteResponse(BaseModel):
 
 @router.post("/{table_id}/rows/bulk-delete", response_model=BulkDeleteResponse)
 async def bulk_delete_table_rows(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
     row_ids: list[uuid.UUID],
@@ -150,7 +150,7 @@ async def bulk_delete_table_rows(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_table_reminder(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
     reminder_create: TableReminderCreate,
@@ -163,7 +163,7 @@ async def create_table_reminder(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_table_reminder(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     table_service: TableServiceDep,
     table_id: uuid.UUID,
     reminder_id: uuid.UUID,

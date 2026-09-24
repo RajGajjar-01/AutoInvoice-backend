@@ -1,6 +1,6 @@
 import uuid
 from datetime import timedelta
-from typing import Any
+from typing import Any, Protocol
 
 from app.core.security import (
     decrypt_token,
@@ -9,7 +9,13 @@ from app.core.security import (
     verify_password,
 )
 from app.core.time import get_datetime_utc
-from app.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
+from app.exceptions import (
+    ConflictError,
+    ForbiddenError,
+    GoogleOnlyAccountError,
+    NotFoundError,
+    ValidationError,
+)
 from app.models import User
 from app.repositories.user_repository import UserRepository
 from app.schemas import UserCreate, UserRegister, UserUpdate, UserUpdateMe
@@ -18,6 +24,10 @@ from app.services import google_oauth_service
 GOOGLE_TOKEN_REFRESH_MARGIN = timedelta(minutes=1)
 
 DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$MjQyZWE1MzBjYjJlZTI0Yw$YTU4NGM5ZTZmYjE2NzZlZjY0ZWY3ZGRkY2U2OWFjNjk"
+
+
+class _HasId(Protocol):
+    id: uuid.UUID
 
 
 def _validate_password(password: str) -> None:
@@ -50,8 +60,13 @@ class UserService:
 
     async def authenticate(self, email: str, password: str) -> User | None:
         db_user = await self.repo.get_by_email(email)
-        if not db_user:
+        if not db_user or db_user.hashed_password is None:
             verify_password(password, DUMMY_HASH)
+            if db_user is not None:
+                raise GoogleOnlyAccountError(
+                    "This account uses Google sign-in. Continue with Google, "
+                    "or set a password in Settings."
+                )
             return None
         verified, updated_hash = verify_password(password, db_user.hashed_password)
         if not verified:
@@ -109,7 +124,7 @@ class UserService:
             update_data["hashed_password"] = get_password_hash(password)
         return await self.repo.update(user, update_data)
 
-    async def delete_user(self, user_id: uuid.UUID, current_superuser: User) -> None:
+    async def delete_user(self, user_id: uuid.UUID, current_superuser: _HasId) -> None:
         if user_id == current_superuser.id:
             raise ForbiddenError("Super users are not allowed to delete themselves")
         user = await self.repo.get(user_id)
@@ -175,12 +190,19 @@ class UserService:
         self,
         user: User,
         *,
+        google_sub: str,
         email: str,
         access_token: str,
         refresh_token: str | None,
         expires_in: int,
     ) -> User:
+        existing = await self.repo.get_by_google_sub(google_sub)
+        if existing and existing.id != user.id:
+            raise ConflictError(
+                "This Google account is already linked to a different user"
+            )
         update_data: dict[str, Any] = {
+            "google_sub": google_sub,
             "google_email": email,
             "google_access_token": encrypt_token(access_token),
             "google_token_expires_at": get_datetime_utc()
@@ -218,14 +240,50 @@ class UserService:
         return access_token
 
     async def disconnect_google(self, user: User) -> User:
+        if user.hashed_password is None:
+            raise ValidationError(
+                "Set a password in Settings before disconnecting Google, "
+                "otherwise you won't be able to log in."
+            )
         return await self.repo.update(
             user,
             {
+                "google_sub": None,
                 "google_email": None,
                 "google_access_token": None,
                 "google_refresh_token": None,
                 "google_token_expires_at": None,
             },
+        )
+
+    async def login_with_google(
+        self, *, sub: str, email: str, email_verified: bool, name: str | None,
+        picture: str | None,
+    ) -> User:
+        user = await self.repo.get_by_google_sub(sub)
+        if user:
+            if not user.is_active:
+                raise ForbiddenError("Inactive user")
+            return user
+
+        user = await self.repo.get_by_email(email)
+        if user:
+            if not (email_verified and user.is_verified):
+                raise ConflictError(
+                    "An account with this email already exists. Log in with your "
+                    "password, then connect Google from Settings."
+                )
+            if not user.is_active:
+                raise ForbiddenError("Inactive user")
+            return await self.repo.update(user, {"google_sub": sub})
+
+        user_create = UserCreate(
+            email=email, password=str(uuid.uuid4()), full_name=name
+        )
+        db_obj = await self.repo.create(user_create, hashed_password=None)
+        return await self.repo.update(
+            db_obj,
+            {"google_sub": sub, "is_verified": True, "avatar_url": picture},
         )
 
     async def create_user_private(
@@ -237,6 +295,8 @@ class UserService:
         is_superuser: bool,
         is_verified: bool,
     ) -> User:
+        if await self.repo.get_by_email(email):
+            raise ConflictError("A user with this email already exists")
         user_create = UserCreate(
             email=email,
             password=password,

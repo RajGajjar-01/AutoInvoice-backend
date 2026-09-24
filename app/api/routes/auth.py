@@ -1,27 +1,37 @@
+import secrets
+import uuid
 from typing import Annotated, Any
 
 import jwt
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import SQLModel
 
 from app.api.deps import CurrentUser, SessionDep, UserServiceDep
+from app.api.routes.google_auth import NONCE_COOKIE, NONCE_COOKIE_MAX_AGE
 from app.core import security
+from app.core.auth_cookies import (
+    COOKIE_SAMESITE,
+    COOKIE_SECURE,
+    clear_auth_cookies,
+    set_auth_cookies,
+)
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.models import User
 from app.schemas import (
     Message,
     NewPassword,
-    Token,
+    SetPassword,
     UpdatePassword,
     UserPublic,
     UserRegister,
     UserUpdateMe,
     VerifyEmailRequest,
 )
-from app.services import verification_service
+from app.services import google_oauth_service, verification_service
 from app.services.email_service import (
     generate_password_reset_token,
     generate_reset_password_email,
@@ -34,42 +44,37 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-ACCESS_TOKEN_MAX_AGE = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-REFRESH_TOKEN_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
-COOKIE_SECURE = settings.ENVIRONMENT != "local"
-COOKIE_SAMESITE = "none" if settings.ENVIRONMENT != "local" else "lax"
-
 
 class LoginRequest(SQLModel):
     email: str
     password: str
 
 
-class AuthResponse(Token):
-    user: UserPublic | None = None
+class AuthResponse(SQLModel):
+    user: UserPublic
 
 
-def _set_auth_cookies(
-    response: Response, access_token: str, refresh_token: str
-) -> None:
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
+@router.get("/google/login")
+def google_login() -> RedirectResponse:
+    if not settings.google_oauth_enabled:
+        raise HTTPException(
+            status_code=503, detail="Google sign-in is not configured on this server"
+        )
+    nonce = secrets.token_urlsafe(32)
+    state = google_oauth_service.create_state_token(
+        user_id=None, mode="login", nonce=nonce
+    )
+    redirect = RedirectResponse(google_oauth_service.get_authorization_url(state))
+    redirect.set_cookie(
+        key=NONCE_COOKIE,
+        value=nonce,
         httponly=True,
         secure=COOKIE_SECURE,
         samesite=COOKIE_SAMESITE,
-        max_age=ACCESS_TOKEN_MAX_AGE,
+        max_age=NONCE_COOKIE_MAX_AGE,
         path="/",
     )
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE,
-        max_age=REFRESH_TOKEN_MAX_AGE,
-        path="/",
-    )
+    return redirect
 
 
 @router.post("/signup", response_model=AuthResponse, status_code=201)
@@ -98,15 +103,8 @@ async def signup(
         logger.warning(
             "[DEV / NO BREVO KEY] Verification code", email=user.email, code=code
         )
-    access_token = security.create_access_token(subject=user.id)
-    refresh_token = security.create_refresh_token(subject=user.id)
-    _set_auth_cookies(response, access_token, refresh_token)
-    return AuthResponse(
-        access_token=access_token,
-        token_type="bearer",
-        refresh_token=refresh_token,
-        user=UserPublic.model_validate(user),
-    )
+    set_auth_cookies(response, user)
+    return AuthResponse(user=UserPublic.from_user(user))
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -121,25 +119,18 @@ async def login(
     user = await user_service.authenticate(body.email, body.password)
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect email or password")
-    access_token = security.create_access_token(subject=user.id)
-    refresh_token = security.create_refresh_token(subject=user.id)
-    _set_auth_cookies(response, access_token, refresh_token)
-    return AuthResponse(
-        access_token=access_token,
-        token_type="bearer",
-        refresh_token=refresh_token,
-        user=UserPublic.model_validate(user),
-    )
+    set_auth_cookies(response, user)
+    return AuthResponse(user=UserPublic.from_user(user))
 
 
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", response_model=Message)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
 async def refresh_token(
     request: Request,
     response: Response,
     session: SessionDep,
     refresh_token: Annotated[str | None, Cookie()] = None,
-) -> Token:
+) -> Message:
     _ = request
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token not found")
@@ -156,8 +147,6 @@ async def refresh_token(
     except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    import uuid
-
     try:
         user_uuid = uuid.UUID(user_id)
     except ValueError:
@@ -167,27 +156,19 @@ async def refresh_token(
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
 
-    new_access_token = security.create_access_token(subject=user_id)
-    new_refresh_token = security.create_refresh_token(subject=user_id)
-    _set_auth_cookies(response, new_access_token, new_refresh_token)
-
-    return Token(
-        access_token=new_access_token,
-        token_type="bearer",
-        refresh_token=new_refresh_token,
-    )
+    set_auth_cookies(response, user)
+    return Message(message="Token refreshed")
 
 
 @router.post("/logout", response_model=Message)
 def logout(response: Response) -> Message:
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/")
+    clear_auth_cookies(response)
     return Message(message="Logged out successfully")
 
 
 @router.get("/me", response_model=UserPublic)
 def get_current_user_info(current_user: CurrentUser) -> Any:
-    return UserPublic.model_validate(current_user)
+    return UserPublic.from_user(current_user)
 
 
 @router.patch("/me", response_model=UserPublic)
@@ -195,7 +176,7 @@ async def update_current_user(
     current_user: CurrentUser, user_in: UserUpdateMe, user_service: UserServiceDep
 ) -> Any:
     user = await user_service.update_me(current_user, user_in)
-    return UserPublic.model_validate(user)
+    return UserPublic.from_user(user)
 
 
 @router.post("/verify-email", response_model=Message)
@@ -304,9 +285,27 @@ async def reset_password(
 async def update_password(
     current_user: CurrentUser, body: UpdatePassword, user_service: UserServiceDep
 ) -> Message:
+    if current_user.hashed_password is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This account has no password yet. Use /auth/set-password to create one.",
+        )
     user = await user_service.authenticate(current_user.email, body.current_password)
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect current password")
 
     await user_service.update_password(user, body.new_password)
     return Message(message="Password updated successfully")
+
+
+@router.post("/set-password", response_model=Message)
+async def set_password(
+    current_user: CurrentUser, body: SetPassword, user_service: UserServiceDep
+) -> Message:
+    if current_user.hashed_password is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="This account already has a password. Use /auth/update-password instead.",
+        )
+    await user_service.update_password(current_user, body.new_password)
+    return Message(message="Password set successfully")

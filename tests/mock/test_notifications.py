@@ -33,7 +33,7 @@ class TestNotifications:
     def test_list_notifications(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.list_items = AsyncMock(return_value=([], 0, 0))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/notifications/")
@@ -43,7 +43,7 @@ class TestNotifications:
     def test_list_with_filters(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.list_items = AsyncMock(return_value=([], 0, 0))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
         r = client.get(
@@ -54,7 +54,7 @@ class TestNotifications:
     def test_create_notification(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.create = AsyncMock(return_value=_notif())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
         r = client.post(
@@ -67,7 +67,7 @@ class TestNotifications:
     def test_get_notification(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.get_owned = AsyncMock(return_value=_notif())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/notifications/{uuid.uuid4()}")
@@ -80,7 +80,7 @@ class TestNotifications:
         mock_svc.get_owned = AsyncMock(
             side_effect=NotFoundError("Notification not found")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/notifications/{uuid.uuid4()}")
@@ -89,7 +89,7 @@ class TestNotifications:
     def test_update_notification(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(return_value=_notif({"read": True}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
         r = client.patch(
@@ -101,7 +101,7 @@ class TestNotifications:
     def test_delete_notification(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(return_value=None)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/notifications/{uuid.uuid4()}")
@@ -110,7 +110,7 @@ class TestNotifications:
     def test_mark_all_read(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.mark_all_read = AsyncMock(return_value=3)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
         r = client.post(f"{settings.API_V1_STR}/notifications/mark-all-read")
@@ -120,7 +120,7 @@ class TestNotifications:
     def test_clear_all(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.clear_all = AsyncMock(return_value=5)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_notification_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/notifications/")
@@ -180,7 +180,7 @@ class TestCompanySettings:
         mock_svc.get_for_owner = AsyncMock(
             side_effect=NotFoundError("Company settings not found")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_company_settings_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/company-settings/")
@@ -191,7 +191,7 @@ class TestCompanySettings:
         mock_svc.get_for_owner = AsyncMock(
             return_value=_settings({"name": "My Company"})
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_company_settings_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/company-settings/")
@@ -201,7 +201,7 @@ class TestCompanySettings:
     def test_create_settings(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.create = AsyncMock(return_value=_settings())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_company_settings_service] = lambda: mock_svc
 
         r = client.post(
@@ -213,7 +213,7 @@ class TestCompanySettings:
     def test_upsert_settings(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.upsert = AsyncMock(return_value=_settings())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_company_settings_service] = lambda: mock_svc
 
         r = client.put(
@@ -225,7 +225,7 @@ class TestCompanySettings:
     def test_delete_settings(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(return_value=None)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_company_settings_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/company-settings/")

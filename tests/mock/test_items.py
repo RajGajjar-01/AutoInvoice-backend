@@ -37,7 +37,7 @@ class TestItemList:
         mock_svc.list_items = AsyncMock(
             return_value=([_item(), _item({"name": "Item 2"})], 2)
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/items/")
@@ -49,7 +49,7 @@ class TestItemList:
     def test_list_items_with_filters(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.list_items = AsyncMock(return_value=([_item()], 1))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.get(
@@ -62,7 +62,7 @@ class TestItemGet:
     def test_get_item(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.get_owned = AsyncMock(return_value=_item())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/items/{uuid.uuid4()}")
@@ -74,7 +74,7 @@ class TestItemGet:
 
         mock_svc = AsyncMock()
         mock_svc.get_owned = AsyncMock(side_effect=NotFoundError("Item not found"))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/items/{uuid.uuid4()}")
@@ -87,7 +87,7 @@ class TestItemGet:
         mock_svc.get_owned = AsyncMock(
             side_effect=ForbiddenError("Not enough permissions")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/items/{uuid.uuid4()}")
@@ -98,7 +98,7 @@ class TestItemCreate:
     def test_create_item(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.create = AsyncMock(return_value=_item({"name": "New Item"}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.post(
@@ -113,7 +113,7 @@ class TestItemUpdate:
     def test_update_item(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(return_value=_item({"name": "Updated"}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.put(
@@ -128,7 +128,7 @@ class TestItemUpdate:
 
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(side_effect=NotFoundError("Item not found"))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.put(
@@ -141,7 +141,7 @@ class TestItemDelete:
     def test_delete_item(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(return_value=None)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/items/{uuid.uuid4()}")
@@ -152,7 +152,7 @@ class TestItemDelete:
 
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(side_effect=NotFoundError("Item not found"))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/items/{uuid.uuid4()}")
@@ -163,7 +163,7 @@ class TestItemCategories:
     def test_list_categories(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.list_categories = AsyncMock(return_value=["General", "Electronics"])
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/items/categories/list")
@@ -175,7 +175,7 @@ class TestItemAdjustStock:
     def test_adjust_stock(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.adjust_stock = AsyncMock(return_value=_item({"stock": 60.0}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.patch(
@@ -190,7 +190,7 @@ class TestItemAdjustStock:
         mock_svc.adjust_stock = AsyncMock(
             side_effect=ValidationError("Insufficient stock")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_item_service] = lambda: mock_svc
 
         r = client.patch(
