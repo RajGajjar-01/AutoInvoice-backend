@@ -147,22 +147,46 @@ def decrypt_token(token: str) -> str:
     return _token_cipher().decrypt(token.encode()).decode()
 
 
+ISSUER = "autoinvoice"
+
+
 def create_access_token(
-    subject: str | Any, expires_delta: timedelta | None = None
+    subject: str | Any,
+    *,
+    email: str,
+    is_superuser: bool,
+    is_verified: bool,
+    expires_delta: timedelta | None = None,
 ) -> str:
-    if expires_delta:
-        expire = get_datetime_utc() + expires_delta
-    else:
-        expire = get_datetime_utc() + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-    to_encode = {"exp": expire, "sub": str(subject), "type": "access"}
+    now = get_datetime_utc()
+    expire = now + (
+        expires_delta
+        if expires_delta
+        else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    to_encode = {
+        "exp": expire,
+        "iat": now,
+        "iss": ISSUER,
+        "sub": str(subject),
+        "type": "access",
+        "email": email,
+        "is_superuser": is_superuser,
+        "is_verified": is_verified,
+    }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
 def create_refresh_token(subject: str | Any) -> str:
-    expire = get_datetime_utc() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode = {"exp": expire, "sub": str(subject), "type": "refresh"}
+    now = get_datetime_utc()
+    expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode = {
+        "exp": expire,
+        "iat": now,
+        "iss": ISSUER,
+        "sub": str(subject),
+        "type": "refresh",
+    }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 

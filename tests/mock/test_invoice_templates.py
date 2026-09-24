@@ -34,7 +34,7 @@ class TestTemplateList:
     def test_list_templates(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.list_items = AsyncMock(return_value=([_template()], 1))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/invoice-templates/")
@@ -43,7 +43,7 @@ class TestTemplateList:
     def test_get_active(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.get_active = AsyncMock(return_value=_template())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/invoice-templates/active")
@@ -57,7 +57,7 @@ class TestTemplateList:
         mock_svc.get_active = AsyncMock(
             side_effect=NotFoundError("No active invoice template")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/invoice-templates/active")
@@ -68,7 +68,7 @@ class TestTemplateGet:
     def test_get_template(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.get_owned = AsyncMock(return_value=_template())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/invoice-templates/{uuid.uuid4()}")
@@ -81,7 +81,7 @@ class TestTemplateGet:
         mock_svc.get_owned = AsyncMock(
             side_effect=NotFoundError("Invoice template not found")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/invoice-templates/{uuid.uuid4()}")
@@ -92,7 +92,7 @@ class TestTemplateCreate:
     def test_create_template(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.create = AsyncMock(return_value=_template({"name": "New Template"}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
         r = client.post(
@@ -107,7 +107,7 @@ class TestTemplateUpdate:
     def test_update_template(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(return_value=_template({"name": "Updated"}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
         r = client.put(
@@ -121,7 +121,7 @@ class TestTemplateActivate:
     def test_activate_template(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.activate = AsyncMock(return_value=_template({"is_active": True}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
         r = client.post(
@@ -135,7 +135,7 @@ class TestTemplateDelete:
     def test_delete_template(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(return_value=None)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_template_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/invoice-templates/{uuid.uuid4()}")
@@ -144,12 +144,12 @@ class TestTemplateDelete:
 
 class TestParseExcel:
     def test_parse_excel_no_file(self, client: TestClient, mock_user):
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         r = client.post(f"{settings.API_V1_STR}/invoice-templates/parse-excel")
         assert r.status_code == 422
 
     def test_parse_excel_invalid_extension(self, client: TestClient, mock_user):
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         r = client.post(
             f"{settings.API_V1_STR}/invoice-templates/parse-excel",
             files={"file": ("test.txt", b"data", "text/plain")},

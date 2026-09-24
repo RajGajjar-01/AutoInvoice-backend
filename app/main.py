@@ -21,6 +21,7 @@ from app.core.redis import redis_client
 from app.exceptions import (
     ConflictError,
     ForbiddenError,
+    GoogleOnlyAccountError,
     NotFoundError,
     RateLimitError,
     ValidationError,
@@ -159,6 +160,13 @@ async def forbidden_exception_handler(
 @app.exception_handler(ConflictError)
 async def conflict_exception_handler(
     request: Request, exc: ConflictError
+) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": exc.message})
+
+
+@app.exception_handler(GoogleOnlyAccountError)
+async def google_only_account_exception_handler(
+    request: Request, exc: GoogleOnlyAccountError
 ) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": exc.message})
 

@@ -15,7 +15,12 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.exec(statement)
         return result.first()
 
-    async def create(self, user_create: UserCreate, hashed_password: str) -> User:
+    async def get_by_google_sub(self, google_sub: str) -> User | None:
+        statement = select(User).where(User.google_sub == google_sub)
+        result = await self.session.exec(statement)
+        return result.first()
+
+    async def create(self, user_create: UserCreate, hashed_password: str | None) -> User:
         db_obj = User.model_validate(
             user_create, update={"hashed_password": hashed_password}
         )

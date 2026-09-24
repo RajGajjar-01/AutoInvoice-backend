@@ -46,7 +46,7 @@ class TestInvoiceList:
     def test_list_invoices(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.list_items = AsyncMock(return_value=([_invoice()], 1))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/invoices/")
@@ -57,7 +57,7 @@ class TestInvoiceList:
     def test_list_with_filters(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.list_items = AsyncMock(return_value=([], 0))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.get(
@@ -70,7 +70,7 @@ class TestInvoiceGet:
     def test_get_invoice(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.get_with_customer = AsyncMock(return_value=_invoice())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/invoices/{uuid.uuid4()}")
@@ -83,7 +83,7 @@ class TestInvoiceGet:
         mock_svc.get_with_customer = AsyncMock(
             side_effect=NotFoundError("Invoice not found")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/invoices/{uuid.uuid4()}")
@@ -94,7 +94,7 @@ class TestInvoiceCreate:
     def test_create_invoice(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.create = AsyncMock(return_value=_invoice())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.post(
@@ -113,7 +113,7 @@ class TestInvoiceUpdate:
     def test_update_invoice(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(return_value=_invoice({"status": "paid"}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.put(
@@ -127,7 +127,7 @@ class TestInvoiceUpdate:
 
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(side_effect=NotFoundError("Invoice not found"))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.put(
@@ -140,7 +140,7 @@ class TestInvoiceDelete:
     def test_delete_invoice(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(return_value=None)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/invoices/{uuid.uuid4()}")
@@ -151,7 +151,7 @@ class TestInvoiceDelete:
 
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(side_effect=NotFoundError("Invoice not found"))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/invoices/{uuid.uuid4()}")
@@ -171,7 +171,7 @@ class TestInvoiceStats:
                 "total_revenue": 50000.0,
             }
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/invoices/stats")

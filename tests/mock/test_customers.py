@@ -41,7 +41,7 @@ class TestCustomers:
     def test_list_customers(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.list_items = AsyncMock(return_value=([_customer()], 1))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_customer_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/customers/")
@@ -51,7 +51,7 @@ class TestCustomers:
     def test_get_customer(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.get_owned = AsyncMock(return_value=_customer())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_customer_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/customers/{uuid.uuid4()}")
@@ -63,7 +63,7 @@ class TestCustomers:
 
         mock_svc = AsyncMock()
         mock_svc.get_owned = AsyncMock(side_effect=NotFoundError("Customer not found"))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_customer_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/customers/{uuid.uuid4()}")
@@ -76,7 +76,7 @@ class TestCustomers:
         mock_svc.get_owned = AsyncMock(
             side_effect=ForbiddenError("Not enough permissions")
         )
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_customer_service] = lambda: mock_svc
 
         r = client.get(f"{settings.API_V1_STR}/customers/{uuid.uuid4()}")
@@ -85,7 +85,7 @@ class TestCustomers:
     def test_create_customer(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.create = AsyncMock(return_value=_customer())
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_customer_service] = lambda: mock_svc
 
         r = client.post(
@@ -97,7 +97,7 @@ class TestCustomers:
     def test_update_customer(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.update = AsyncMock(return_value=_customer({"name": "Updated"}))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_customer_service] = lambda: mock_svc
 
         r = client.put(
@@ -109,7 +109,7 @@ class TestCustomers:
     def test_delete_customer(self, client: TestClient, mock_user):
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(return_value=None)
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_customer_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/customers/{uuid.uuid4()}")
@@ -120,7 +120,7 @@ class TestCustomers:
 
         mock_svc = AsyncMock()
         mock_svc.delete = AsyncMock(side_effect=NotFoundError("Customer not found"))
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_customer_service] = lambda: mock_svc
 
         r = client.delete(f"{settings.API_V1_STR}/customers/{uuid.uuid4()}")

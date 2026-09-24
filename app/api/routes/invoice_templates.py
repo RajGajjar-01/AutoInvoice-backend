@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from app.api.deps import CurrentUser, InvoiceTemplateServiceDep
+from app.api.deps import CurrentPrincipal, InvoiceTemplateServiceDep
 from app.schemas import (
     InvoiceTemplateCreate,
     InvoiceTemplatePublic,
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/invoice-templates", tags=["invoice-templates"])
 
 @router.get("/", response_model=InvoiceTemplatesPublic)
 async def read_invoice_templates(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_template_service: InvoiceTemplateServiceDep,
     skip: int = 0,
     limit: int = 200,
@@ -31,7 +31,7 @@ async def read_invoice_templates(
 
 @router.get("/active", response_model=InvoiceTemplatePublic)
 async def read_active_invoice_template(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_template_service: InvoiceTemplateServiceDep,
 ) -> Any:
     return await invoice_template_service.get_active(current_user.id)
@@ -39,7 +39,7 @@ async def read_active_invoice_template(
 
 @router.get("/{id}", response_model=InvoiceTemplatePublic)
 async def read_invoice_template(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_template_service: InvoiceTemplateServiceDep,
     id: uuid.UUID,
 ) -> Any:
@@ -49,7 +49,7 @@ async def read_invoice_template(
 @router.post("/", response_model=InvoiceTemplatePublic, status_code=201)
 async def create_invoice_template(
     *,
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_template_service: InvoiceTemplateServiceDep,
     template_in: InvoiceTemplateCreate,
 ) -> Any:
@@ -59,7 +59,7 @@ async def create_invoice_template(
 @router.put("/{id}", response_model=InvoiceTemplatePublic)
 async def update_invoice_template(
     *,
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_template_service: InvoiceTemplateServiceDep,
     id: uuid.UUID,
     template_in: InvoiceTemplateUpdate,
@@ -69,7 +69,7 @@ async def update_invoice_template(
 
 @router.post("/{id}/activate", response_model=InvoiceTemplatePublic)
 async def activate_invoice_template(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_template_service: InvoiceTemplateServiceDep,
     id: uuid.UUID,
 ) -> Any:
@@ -78,7 +78,7 @@ async def activate_invoice_template(
 
 @router.delete("/{id}", status_code=204)
 async def delete_invoice_template(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_template_service: InvoiceTemplateServiceDep,
     id: uuid.UUID,
 ) -> None:
@@ -94,7 +94,7 @@ class ExcelParseResponse(BaseModel):
 
 @router.post("/parse-excel", response_model=ExcelParseResponse)
 async def parse_excel_preview(
-    _current_user: CurrentUser,
+    _current_user: CurrentPrincipal,
     file: UploadFile = File(...),
 ) -> Any:
     if not file.filename:

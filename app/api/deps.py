@@ -1,5 +1,6 @@
 import uuid
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from typing import Annotated
 
 import jwt
@@ -108,15 +109,82 @@ async def get_current_user(session: SessionDep, token: TokenDep) -> User:
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-def get_current_active_superuser(current_user: CurrentUser) -> User:
-    if not current_user.is_superuser:
+@dataclass(frozen=True)
+class Principal:
+    """Identity + authorization claims read straight off the access token.
+
+    No DB lookup. Use this for routes that only need `.id` for ownership
+    checks or `.is_superuser` for access control. Routes that need real,
+    possibly-stale-if-cached user fields (email verification state at the
+    moment of the request, Google tokens, etc.) should depend on CurrentUser
+    instead.
+    """
+
+    id: uuid.UUID
+    email: str
+    is_superuser: bool
+    is_verified: bool
+
+
+async def get_current_principal(token: TokenDep) -> Principal:
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+        )
+    except InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
+
+    if payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid token type",
+        )
+
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid token: missing subject",
+        )
+
+    try:
+        user_id = uuid.UUID(sub)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid user ID format",
+        )
+
+    email = payload.get("email")
+    if email is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid token: missing claims",
+        )
+
+    return Principal(
+        id=user_id,
+        email=email,
+        is_superuser=bool(payload.get("is_superuser", False)),
+        is_verified=bool(payload.get("is_verified", False)),
+    )
+
+
+CurrentPrincipal = Annotated[Principal, Depends(get_current_principal)]
+
+
+def get_current_active_superuser(principal: CurrentPrincipal) -> Principal:
+    if not principal.is_superuser:
         raise HTTPException(
             status_code=403, detail="The user doesn't have enough privileges"
         )
-    return current_user
+    return principal
 
 
-SuperUserDep = Annotated[User, Depends(get_current_active_superuser)]
+SuperUserDep = Annotated[Principal, Depends(get_current_active_superuser)]
 
 
 def get_user_service(session: SessionDep) -> UserService:

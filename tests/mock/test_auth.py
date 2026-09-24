@@ -23,6 +23,7 @@ def _mock_user(overrides=None):
     u.updated_at = MagicMock()
     u.google_email = None
     u.google_connected = False
+    u.google_sub = None
     if overrides:
         for k, v in overrides.items():
             setattr(u, k, v)
@@ -43,10 +44,12 @@ class TestSignup:
         app.dependency_overrides[deps.get_user_service] = lambda: mock_service
 
         monkeypatch.setattr(
-            "app.api.routes.auth.security.create_access_token", lambda **kw: "access"
+            "app.core.auth_cookies.security.create_access_token",
+            lambda **kw: "access",
         )
         monkeypatch.setattr(
-            "app.api.routes.auth.security.create_refresh_token", lambda **kw: "refresh"
+            "app.core.auth_cookies.security.create_refresh_token",
+            lambda **kw: "refresh",
         )
         monkeypatch.setattr("app.api.routes.auth.send_email", lambda **kw: None)
 
@@ -60,8 +63,8 @@ class TestSignup:
         )
         assert r.status_code == 201
         data = r.json()
-        assert data["access_token"] == "access"
         assert data["user"]["email"] == "user@test.com"
+        assert r.cookies.get("access_token") == "access"
 
     def test_signup_existing(self, client: TestClient):
         from app.exceptions import ConflictError
@@ -94,10 +97,12 @@ class TestLogin:
         app.dependency_overrides[deps.get_user_service] = lambda: mock_service
 
         monkeypatch.setattr(
-            "app.api.routes.auth.security.create_access_token", lambda **kw: "access"
+            "app.core.auth_cookies.security.create_access_token",
+            lambda **kw: "access",
         )
         monkeypatch.setattr(
-            "app.api.routes.auth.security.create_refresh_token", lambda **kw: "refresh"
+            "app.core.auth_cookies.security.create_refresh_token",
+            lambda **kw: "refresh",
         )
 
         r = client.post(
@@ -105,7 +110,8 @@ class TestLogin:
             json={"email": "user@test.com", "password": "testpass123"},
         )
         assert r.status_code == 200
-        assert r.json()["access_token"] == "access"
+        assert r.json()["user"]["email"] == "user@test.com"
+        assert r.cookies.get("access_token") == "access"
 
     def test_login_invalid(self, client: TestClient):
         mock_service = AsyncMock(spec=["authenticate"])
@@ -137,18 +143,18 @@ class TestRefresh:
         app.dependency_overrides[deps.get_db] = override_db
 
         monkeypatch.setattr(
-            "app.api.routes.auth.security.create_access_token",
+            "app.core.auth_cookies.security.create_access_token",
             lambda **kw: "new_access",
         )
         monkeypatch.setattr(
-            "app.api.routes.auth.security.create_refresh_token",
+            "app.core.auth_cookies.security.create_refresh_token",
             lambda **kw: "new_refresh",
         )
 
         client.cookies.set("refresh_token", "valid_refresh")
         r = client.post(f"{settings.API_V1_STR}/auth/refresh")
         assert r.status_code == 200
-        assert r.json()["access_token"] == "new_access"
+        assert r.cookies.get("access_token") == "new_access"
 
     def test_refresh_no_token(self, client: TestClient):
         r = client.post(f"{settings.API_V1_STR}/auth/refresh")

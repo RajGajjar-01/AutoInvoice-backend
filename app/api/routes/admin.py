@@ -35,7 +35,7 @@ async def list_users(
     users, total = await user_service.list_users(skip=skip, limit=limit)
     total_pages = (total + limit - 1) // limit if total > 0 else 1
     return PaginatedResponse(
-        data=[UserPublic.model_validate(u) for u in users],
+        data=[UserPublic.from_user(u) for u in users],
         total=total,
         page=skip // limit + 1,
         page_size=limit,
@@ -53,7 +53,7 @@ async def create_user(
         full_name=user_in.full_name,
         is_superuser=user_in.is_superuser,
     )
-    return UserPublic.model_validate(user)
+    return UserPublic.from_user(user)
 
 
 @router.get("/users/{user_id}", response_model=UserPublic)
@@ -61,7 +61,7 @@ async def get_user(
     superuser: SuperUserDep, user_id: uuid.UUID, user_service: UserServiceDep
 ) -> UserPublic:
     user = await user_service.get_by_id_or_404(user_id)
-    return UserPublic.model_validate(user)
+    return UserPublic.from_user(user)
 
 
 @router.patch("/users/{user_id}", response_model=UserPublic)
@@ -79,7 +79,7 @@ async def update_user(
         is_superuser=user_in.is_superuser,
         is_active=user_in.is_active,
     )
-    return UserPublic.model_validate(user)
+    return UserPublic.from_user(user)
 
 
 @router.delete("/users/{user_id}", status_code=204)

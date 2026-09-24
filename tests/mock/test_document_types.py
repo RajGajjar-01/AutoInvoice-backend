@@ -170,7 +170,7 @@ class TestDocumentTypeSchema:
 
 class TestDocumentTypeApi:
     def _override(self, mock_user, mock_svc):
-        app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+        app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
         app.dependency_overrides[deps.get_invoice_service] = lambda: mock_svc
 
     def test_create_challan_persists_delivery_fields(

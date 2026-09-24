@@ -22,7 +22,7 @@ class User(UserBase, table=True):
     __tablename__ = "user"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    hashed_password: str
+    hashed_password: str | None = Field(default=None)
     is_verified: bool = Field(default=False)
     avatar_url: str | None = Field(default=None, max_length=500)
     created_at: datetime | None = Field(
@@ -34,6 +34,7 @@ class User(UserBase, table=True):
         sa_type=DateTime(timezone=True),
     )
 
+    google_sub: str | None = Field(default=None, max_length=255, unique=True, index=True)
     google_email: str | None = Field(default=None, max_length=255)
     google_access_token: str | None = Field(default=None, max_length=4096)
     google_refresh_token: str | None = Field(default=None, max_length=4096)

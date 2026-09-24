@@ -1,10 +1,14 @@
+import html
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Query
+import httpx
+import structlog
+from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import (
     CompanySettingsServiceDep,
+    CurrentPrincipal,
     CurrentUser,
     InvoicePDFServiceDep,
     InvoiceServiceDep,
@@ -30,12 +34,14 @@ from app.services.gmail_service import send_email as send_gmail_email
 from app.services.invoice_pdf_service import document_title_for
 from app.services.whatsapp_service import WhatsAppService
 
+logger = structlog.get_logger(__name__)
+
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
 
 @router.get("/stats", response_model=DashboardStats)
 async def get_dashboard_stats(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_service: InvoiceServiceDep,
     document_type: DocumentType | None = None,
 ) -> Any:
@@ -45,7 +51,7 @@ async def get_dashboard_stats(
 
 @router.get("/", response_model=InvoicesPublic)
 async def read_invoices(
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_service: InvoiceServiceDep,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -66,7 +72,7 @@ async def read_invoices(
 
 @router.get("/{id}", response_model=InvoiceWithCustomer)
 async def read_invoice(
-    current_user: CurrentUser, invoice_service: InvoiceServiceDep, id: uuid.UUID
+    current_user: CurrentPrincipal, invoice_service: InvoiceServiceDep, id: uuid.UUID
 ) -> Any:
     return await invoice_service.get_with_customer(id, current_user.id)
 
@@ -74,7 +80,7 @@ async def read_invoice(
 @router.post("/", response_model=InvoicePublic, status_code=201)
 async def create_invoice(
     *,
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_service: InvoiceServiceDep,
     invoice_in: InvoiceCreate,
 ) -> Any:
@@ -84,7 +90,7 @@ async def create_invoice(
 @router.put("/{id}", response_model=InvoicePublic)
 async def update_invoice(
     *,
-    current_user: CurrentUser,
+    current_user: CurrentPrincipal,
     invoice_service: InvoiceServiceDep,
     id: uuid.UUID,
     invoice_in: InvoiceUpdate,
@@ -94,7 +100,7 @@ async def update_invoice(
 
 @router.delete("/{id}", status_code=204)
 async def delete_invoice(
-    current_user: CurrentUser, invoice_service: InvoiceServiceDep, id: uuid.UUID
+    current_user: CurrentPrincipal, invoice_service: InvoiceServiceDep, id: uuid.UUID
 ) -> None:
     await invoice_service.delete(id, current_user.id)
 
@@ -136,7 +142,6 @@ async def send_invoice_email(
     pdf_service: InvoicePDFServiceDep,
     company_settings_service: CompanySettingsServiceDep,
     user_service: UserServiceDep,
-    background_tasks: BackgroundTasks,
     id: uuid.UUID,
     req: SendEmailRequest,
 ) -> dict[str, str]:
@@ -152,25 +157,44 @@ async def send_invoice_email(
     doc_label = _document_label(invoice)
 
     subject = req.subject or f"{doc_label} {invoice.invoice_number} from {company.name}"
+    body_html = (
+        "<br>".join(html.escape(line) for line in req.message.splitlines())
+        if req.message.strip()
+        else f"Please find your {doc_label.lower()} <strong>{invoice.invoice_number}</strong> attached."
+    )
     html_content = f"""<p>Dear {invoice.customer.name},</p>
-<p>Please find your {doc_label.lower()} <strong>{invoice.invoice_number}</strong> attached.</p>
+<p>{body_html}</p>
 <p>Amount: {invoice.currency} {invoice.grand_total:,.2f}<br>
 Due Date: {invoice.due_date or "N/A"}</p>
 <p>Thank you for your business!</p>"""
 
-    background_tasks.add_task(
-        send_gmail_email,
-        access_token=access_token,
-        from_email=current_user.google_email or current_user.email,
-        to_email=req.to_email,
-        subject=subject,
-        html_content=html_content,
-        attachment=(
-            _pdf_filename(doc_label, invoice.invoice_number),
-            pdf_bytes,
-            "application/pdf",
-        ),
-    )
+    try:
+        send_gmail_email(
+            access_token=access_token,
+            from_email=current_user.google_email or current_user.email,
+            to_email=req.to_email,
+            subject=subject,
+            html_content=html_content,
+            attachment=(
+                _pdf_filename(doc_label, invoice.invoice_number),
+                pdf_bytes,
+                "application/pdf",
+            ),
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            "Gmail send failed", status=e.response.status_code, body=e.response.text
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Gmail rejected the email. Try reconnecting your Google "
+            "account in Settings, then send again.",
+        )
+    except httpx.HTTPError:
+        logger.exception("Gmail send failed")
+        raise HTTPException(
+            status_code=502, detail="Could not reach Gmail. Please try again."
+        )
     return {"message": "Email sent successfully"}
 
 
