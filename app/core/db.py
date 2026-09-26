@@ -1,4 +1,7 @@
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import NullPool
 from sqlmodel import Session, create_engine, select
 
 from app.core.config import settings
@@ -6,9 +9,23 @@ from app.core.security import get_password_hash
 from app.models import User
 from app.schemas import UserCreate
 
-engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+
+def _engine_kwargs() -> dict[str, Any]:
+    kwargs: dict[str, Any] = {"connect_args": settings.DB_CONNECT_ARGS}
+    if settings.DB_POOL == "null":
+        kwargs["poolclass"] = NullPool
+    else:
+        kwargs.update(
+            pool_size=settings.DB_POOL_SIZE,
+            max_overflow=settings.DB_MAX_OVERFLOW,
+            pool_pre_ping=True,
+        )
+    return kwargs
+
+
+engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI), **_engine_kwargs())
 async_engine: AsyncEngine = create_async_engine(
-    str(settings.ASYNC_SQLALCHEMY_DATABASE_URI)
+    str(settings.ASYNC_SQLALCHEMY_DATABASE_URI), **_engine_kwargs()
 )
 
 

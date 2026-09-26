@@ -61,13 +61,34 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = ""
 
-    REDIS_SERVER: str = "localhost"
-    REDIS_PORT: int = 6379
+    # Connection tuning — lets the same code target local Postgres, RDS or Supabase.
+    DB_SSLMODE: str | None = None  # e.g. "require" for Supabase / RDS
+    DB_POOL: Literal["queue", "null"] = "queue"  # "null" on Lambda: no pooling
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    # Off for PgBouncer/Supavisor transaction mode (Supabase port 6543).
+    DB_PREPARE: bool = True
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def REDIS_URL(self) -> str:
-        return f"redis://{self.REDIS_SERVER}:{self.REDIS_PORT}/0"
+    def DB_CONNECT_ARGS(self) -> dict[str, Any]:
+        args: dict[str, Any] = {}
+        if self.DB_SSLMODE:
+            args["sslmode"] = self.DB_SSLMODE
+        if not self.DB_PREPARE:
+            args["prepare_threshold"] = None
+        return args
+
+    # Full URL wins (rediss://default:pass@host:6379 for Upstash); else server/port.
+    REDIS_URL: str = ""
+    REDIS_SERVER: str = "localhost"
+    REDIS_PORT: int = 6379
+
+    @model_validator(mode="after")
+    def _default_redis_url(self) -> Self:
+        if not self.REDIS_URL:
+            self.REDIS_URL = f"redis://{self.REDIS_SERVER}:{self.REDIS_PORT}/0"
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property

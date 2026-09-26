@@ -40,6 +40,7 @@ def run_migrations_online():
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=settings.DB_CONNECT_ARGS,
     )
 
     with connectable.connect() as connection:
