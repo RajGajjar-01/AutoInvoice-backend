@@ -1,0 +1,24 @@
+# AWS CodeBuild: build Dockerfile.lambda, push to ECR, and (if LAMBDA_FUNCTION is set)
+# point the Lambda function at the new image. Set in the CodeBuild project:
+#   ECR_REPO          e.g. autoinvoice-backend
+#   LAMBDA_FUNCTION   e.g. autoinvoice-backend (leave unset on the very first build)
+# Environment needs "Privileged" enabled (Docker builds).
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - REGISTRY=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - IMAGE=$REGISTRY/$ECR_REPO:latest
+      - aws ecr get-login-password | docker login --username AWS --password-stdin $REGISTRY
+  build:
+    commands:
+      - docker build --provenance=false -f Dockerfile.lambda -t $IMAGE .
+      - docker push $IMAGE
+  post_build:
+    commands:
+      - |
+        if [ -n "$LAMBDA_FUNCTION" ]; then
+          aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" --image-uri "$IMAGE"
+        fi

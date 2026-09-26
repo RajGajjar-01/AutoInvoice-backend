@@ -39,6 +39,8 @@ DATABASE_URL=... DB_SSLMODE=require uv run python -m app.initial_data   # first 
 
 ## 3. Build & push image
 
+Console-only: use a CodeBuild project with `buildspec.lambda.yml` (see that file). With the CLI:
+
 ```
 aws ecr create-repository --repository-name autoinvoice-backend   # once
 aws ecr get-login-password | docker login --username AWS --password-stdin <acct>.dkr.ecr.<region>.amazonaws.com
