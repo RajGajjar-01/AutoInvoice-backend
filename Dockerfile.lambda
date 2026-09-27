@@ -2,7 +2,7 @@
 # AWS Lambda container image. Same Debian base + WeasyPrint libs as ./Dockerfile,
 # plus the Lambda runtime interface client. Migrations are NOT run here — run
 # `alembic upgrade head` from your machine/CI (see docs/deploy-lambda.md).
-FROM python:3.13-slim-bookworm AS builder
+FROM public.ecr.aws/docker/library/python:3.13-slim-bookworm AS builder
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev && \
     uv pip install --python /app/.venv/bin/python awslambdaric
 
-FROM python:3.13-slim-bookworm
+FROM public.ecr.aws/docker/library/python:3.13-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
