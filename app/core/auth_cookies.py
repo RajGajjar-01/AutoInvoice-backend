@@ -39,5 +39,13 @@ def set_auth_cookies(response: Response, user: User) -> None:
 
 
 def clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/")
+    # Must mirror the set_cookie attributes: browsers ignore a cross-site
+    # SameSite=Lax / non-Secure deletion of a SameSite=None; Secure cookie.
+    for key in ("access_token", "refresh_token"):
+        response.delete_cookie(
+            key,
+            path="/",
+            secure=COOKIE_SECURE,
+            httponly=True,
+            samesite=COOKIE_SAMESITE,
+        )

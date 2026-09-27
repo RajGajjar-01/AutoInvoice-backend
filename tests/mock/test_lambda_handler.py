@@ -1,3 +1,5 @@
+import asyncio
+
 from app.lambda_handler import handler
 
 
@@ -13,5 +15,6 @@ def test_function_url_trailing_slash_is_routed_not_redirected() -> None:
         },
         "isBase64Encoded": False,
     }
+    asyncio.set_event_loop(asyncio.new_event_loop())  # other tests close the loop
     response = handler(event, None)
     assert response["statusCode"] == 401  # reached the route (needs auth), no 307 loop
