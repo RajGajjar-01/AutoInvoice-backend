@@ -1,6 +1,7 @@
 import base64
 from dataclasses import dataclass
 from datetime import timedelta
+from email.utils import formataddr
 from pathlib import Path
 from string import Template
 from typing import Any
@@ -13,6 +14,7 @@ from jwt.exceptions import InvalidTokenError
 from app.core import security
 from app.core.config import settings
 from app.core.time import get_datetime_utc
+from app.services import gmail_service, google_oauth_service
 
 logger = structlog.get_logger(__name__)
 
@@ -40,7 +42,22 @@ def send_email(
     attachment: tuple[str, bytes, str] | None = None,
 ) -> None:
     assert settings.emails_enabled, "no provided configuration for email variables"
-    assert settings.BREVO_API_KEY
+    if not settings.BREVO_API_KEY:
+        assert settings.GMAIL_SENDER_REFRESH_TOKEN
+        tokens = google_oauth_service.refresh_access_token(
+            settings.GMAIL_SENDER_REFRESH_TOKEN
+        )
+        gmail_service.send_email(
+            access_token=tokens["access_token"],
+            from_email=formataddr(
+                (settings.EMAILS_FROM_NAME, settings.EMAILS_FROM_EMAIL)
+            ),
+            to_email=email_to,
+            subject=subject,
+            html_content=html_content,
+            attachment=attachment,
+        )
+        return
     payload: dict[str, Any] = {
         "sender": {
             "name": settings.EMAILS_FROM_NAME,

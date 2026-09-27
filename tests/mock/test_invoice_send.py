@@ -622,3 +622,32 @@ class TestSendEmailServiceAttachment:
         _, kwargs = mock_post.call_args
         assert "attachment" not in kwargs["json"]
         mock_response.raise_for_status.assert_called_once()
+
+    @patch("app.services.email_service.settings")
+    @patch("app.services.email_service.httpx.post")
+    @patch("app.services.email_service.gmail_service.send_email")
+    @patch("app.services.email_service.google_oauth_service.refresh_access_token")
+    def test_send_email_via_gmail_when_no_brevo(
+        self, mock_refresh, mock_gmail_send, mock_brevo_post, mock_settings
+    ):
+        mock_settings.emails_enabled = True
+        mock_settings.BREVO_API_KEY = None
+        mock_settings.GMAIL_SENDER_REFRESH_TOKEN = "refresh-tok"
+        mock_settings.EMAILS_FROM_NAME = "UnifiedDesk"
+        mock_settings.EMAILS_FROM_EMAIL = "sender@gmail.com"
+        mock_refresh.return_value = {"access_token": "access-tok"}
+
+        from app.services.email_service import send_email
+
+        send_email(email_to="x@y.com", subject="Code", html_content="<p>1234</p>")
+
+        mock_refresh.assert_called_once_with("refresh-tok")
+        mock_gmail_send.assert_called_once_with(
+            access_token="access-tok",
+            from_email="UnifiedDesk <sender@gmail.com>",
+            to_email="x@y.com",
+            subject="Code",
+            html_content="<p>1234</p>",
+            attachment=None,
+        )
+        mock_brevo_post.assert_not_called()

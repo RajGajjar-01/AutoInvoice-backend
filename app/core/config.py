@@ -130,6 +130,9 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/google/callback"
+    # System emails via Gmail API instead of Brevo: refresh token (gmail.send scope)
+    # of the EMAILS_FROM_EMAIL account, issued to GOOGLE_CLIENT_ID.
+    GMAIL_SENDER_REFRESH_TOKEN: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -149,7 +152,8 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def emails_enabled(self) -> bool:
-        return bool(self.BREVO_API_KEY and self.EMAILS_FROM_EMAIL)
+        gmail = bool(self.GMAIL_SENDER_REFRESH_TOKEN and self.google_oauth_enabled)
+        return bool(self.EMAILS_FROM_EMAIL and (self.BREVO_API_KEY or gmail))
 
     EMAIL_TEST_USER: EmailStr = "test@example.com"
     FIRST_SUPERUSER: EmailStr = "admin@example.com"
