@@ -38,6 +38,9 @@ class UserUpdate(UserBase):
 class UserUpdateMe(SQLModel):
     full_name: str | None = Field(default=None, max_length=255)
     email: EmailStr | None = Field(default=None, max_length=255)
+    # Required when changing the email address (re-authentication), so a stolen
+    # session cannot redirect password recovery to an attacker's mailbox.
+    current_password: str | None = Field(default=None, max_length=128)
 
 
 class UpdatePassword(SQLModel):
@@ -49,6 +52,11 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
+    # Incremented to revoke every outstanding access/refresh token for this user
+    # (logout, password change/reset, deactivation). Never exposed via the API.
+    token_version: int = Field(
+        default=0, nullable=False, sa_column_kwargs={"server_default": "0"}
+    )
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -121,9 +129,11 @@ class Token(SQLModel):
 
 # Contents of JWT token
 class TokenPayload(SQLModel):
-    sub: str | None = None
+    sub: uuid.UUID
+    type: str
+    ver: int = 0
 
 
 class NewPassword(SQLModel):
-    token: str
+    token: str = Field(max_length=2048)
     new_password: str = Field(min_length=8, max_length=128)

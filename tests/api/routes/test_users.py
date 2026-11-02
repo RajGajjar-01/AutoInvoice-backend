@@ -8,7 +8,7 @@ from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
 from app.models import User, UserCreate
-from tests.utils.user import create_random_user
+from tests.utils.user import create_random_user, user_authentication_headers
 from tests.utils.utils import random_email, random_lower_string
 
 
@@ -198,15 +198,21 @@ def test_retrieve_users(
         assert "email" in item
 
 
-def test_update_user_me(
-    client: TestClient, normal_user_token_headers: dict[str, str], db: Session
-) -> None:
+def test_update_user_me(client: TestClient, db: Session) -> None:
+    old_email = random_email()
+    password = random_lower_string()
+    crud.create_user(
+        session=db, user_create=UserCreate(email=old_email, password=password)
+    )
+    headers = user_authentication_headers(
+        client=client, email=old_email, password=password
+    )
     full_name = "Updated Name"
     email = random_email()
-    data = {"full_name": full_name, "email": email}
+    data = {"full_name": full_name, "email": email, "current_password": password}
     r = client.patch(
         f"{settings.API_V1_STR}/users/me",
-        headers=normal_user_token_headers,
+        headers=headers,
         json=data,
     )
     assert r.status_code == 200
@@ -245,14 +251,21 @@ def test_update_password_me(
     verified, _ = verify_password(new_password, user_db.hashed_password)
     assert verified
 
+    # The password change revoked the old token.
+    r = client.get(f"{settings.API_V1_STR}/users/me", headers=superuser_token_headers)
+    assert r.status_code == 403
+
     # Revert to the old password to keep consistency in test
+    new_headers = user_authentication_headers(
+        client=client, email=settings.FIRST_SUPERUSER, password=new_password
+    )
     old_data = {
         "current_password": new_password,
         "new_password": settings.FIRST_SUPERUSER_PASSWORD,
     }
     r = client.patch(
         f"{settings.API_V1_STR}/users/me/password",
-        headers=superuser_token_headers,
+        headers=new_headers,
         json=old_data,
     )
     db.refresh(user_db)
@@ -279,15 +292,21 @@ def test_update_password_me_incorrect_password(
     assert updated_user["detail"] == "Incorrect password"
 
 
-def test_update_user_me_email_exists(
-    client: TestClient, normal_user_token_headers: dict[str, str], db: Session
-) -> None:
+def test_update_user_me_email_exists(client: TestClient, db: Session) -> None:
+    me_email = random_email()
+    me_password = random_lower_string()
+    crud.create_user(
+        session=db, user_create=UserCreate(email=me_email, password=me_password)
+    )
+    normal_user_token_headers = user_authentication_headers(
+        client=client, email=me_email, password=me_password
+    )
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
     user = crud.create_user(session=db, user_create=user_in)
 
-    data = {"email": user.email}
+    data = {"email": user.email, "current_password": me_password}
     r = client.patch(
         f"{settings.API_V1_STR}/users/me",
         headers=normal_user_token_headers,
@@ -326,9 +345,7 @@ def test_register_user(client: TestClient, db: Session) -> None:
         json=data,
     )
     assert r.status_code == 200
-    created_user = r.json()
-    assert created_user["email"] == username
-    assert created_user["full_name"] == full_name
+    assert "message" in r.json()
 
     user_query = select(User).where(User.email == username)
     user_db = db.exec(user_query).first()
@@ -351,8 +368,9 @@ def test_register_user_already_exists_error(client: TestClient) -> None:
         f"{settings.API_V1_STR}/users/signup",
         json=data,
     )
-    assert r.status_code == 400
-    assert r.json()["detail"] == "The user with this email already exists in the system"
+    # Same response as a fresh signup: no account enumeration.
+    assert r.status_code == 200
+    assert r.json()["message"].startswith("If this email address can be registered")
 
 
 def test_update_user(
@@ -519,3 +537,40 @@ def test_delete_user_without_privileges(
     )
     assert r.status_code == 403
     assert r.json()["detail"] == "The user doesn't have enough privileges"
+
+
+def test_update_user_me_email_requires_current_password(
+    client: TestClient, db: Session
+) -> None:
+    email = random_email()
+    password = random_lower_string()
+    crud.create_user(session=db, user_create=UserCreate(email=email, password=password))
+    headers = user_authentication_headers(client=client, email=email, password=password)
+    for body in (
+        {"email": random_email()},
+        {"email": random_email(), "current_password": "wrong-password-123"},
+    ):
+        r = client.patch(f"{settings.API_V1_STR}/users/me", headers=headers, json=body)
+        assert r.status_code == 400
+    db.expire_all()
+    assert crud.get_user_by_email(session=db, email=email) is not None
+
+
+def test_email_lookup_is_case_insensitive(client: TestClient, db: Session) -> None:
+    email = random_email()
+    password = random_lower_string()
+    crud.create_user(session=db, user_create=UserCreate(email=email, password=password))
+    r = client.post(
+        f"{settings.API_V1_STR}/login/access-token",
+        data={"username": email.upper(), "password": password},
+    )
+    assert r.status_code == 200
+
+
+def test_read_users_limit_is_capped(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    r = client.get(
+        f"{settings.API_V1_STR}/users/?limit=100000000", headers=superuser_token_headers
+    )
+    assert r.status_code == 422

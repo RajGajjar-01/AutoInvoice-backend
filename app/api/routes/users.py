@@ -1,17 +1,21 @@
+import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import col, delete, func, select
 
 from app import crud
 from app.api.deps import (
     CurrentUser,
+    LimitDep,
     SessionDep,
+    SkipDep,
     get_current_active_superuser,
 )
+from app.core import rate_limit
 from app.core.config import settings
-from app.core.security import get_password_hash, verify_password
+from app.core.security import verify_password
 from app.models import (
     Item,
     Message,
@@ -26,6 +30,8 @@ from app.models import (
 )
 from app.utils import generate_new_account_email, send_email
 
+logger = logging.getLogger("app.security")
+
 router = APIRouter(prefix="/users", tags=["users"])
 
 
@@ -34,7 +40,7 @@ router = APIRouter(prefix="/users", tags=["users"])
     dependencies=[Depends(get_current_active_superuser)],
     response_model=UsersPublic,
 )
-def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
+def read_users(session: SessionDep, skip: SkipDep = 0, limit: LimitDep = 100) -> Any:
     """
     Retrieve users.
     """
@@ -66,8 +72,9 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
 
     user = crud.create_user(session=session, user_create=user_in)
     if settings.emails_enabled and user_in.email:
+        # Never email the password itself.
         email_data = generate_new_account_email(
-            email_to=user_in.email, username=user_in.email, password=user_in.password
+            email_to=user_in.email, username=user_in.email
         )
         send_email(
             email_to=user_in.email,
@@ -85,13 +92,30 @@ def update_user_me(
     Update own user.
     """
 
-    if user_in.email:
+    user_data = user_in.model_dump(exclude_unset=True, exclude={"current_password"})
+    if user_in.email and crud.normalize_email(user_in.email) != current_user.email:
+        # Re-authenticate before changing the address that password recovery
+        # goes to; otherwise a stolen session becomes a permanent takeover.
+        verified = (
+            bool(user_in.current_password)
+            and verify_password(
+                user_in.current_password or "", current_user.hashed_password
+            )[0]
+        )
+        if not verified:
+            raise HTTPException(
+                status_code=400,
+                detail="Current password is required to change the email address",
+            )
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != current_user.id:
             raise HTTPException(
                 status_code=409, detail="User with this email already exists"
             )
-    user_data = user_in.model_dump(exclude_unset=True)
+        user_data["email"] = crud.normalize_email(user_in.email)
+        logger.info("email_changed user_id=%s", current_user.id)
+    else:
+        user_data.pop("email", None)
     current_user.sqlmodel_update(user_data)
     session.add(current_user)
     session.commit()
@@ -113,10 +137,12 @@ def update_password_me(
         raise HTTPException(
             status_code=400, detail="New password cannot be the same as the current one"
         )
-    hashed_password = get_password_hash(body.new_password)
-    current_user.hashed_password = hashed_password
-    session.add(current_user)
-    session.commit()
+    # Revokes all existing sessions (including this one); the client must log in
+    # again with the new password.
+    crud.set_user_password(
+        session=session, db_user=current_user, password=body.new_password
+    )
+    logger.info("password_changed user_id=%s", current_user.id)
     return Message(message="Password updated successfully")
 
 
@@ -142,20 +168,39 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     return Message(message="User deleted successfully")
 
 
-@router.post("/signup", response_model=UserPublic)
-def register_user(session: SessionDep, user_in: UserRegister) -> Any:
+SIGNUP_MESSAGE = (
+    "If this email address can be registered, the account has been created. "
+    "You can now log in."
+)
+
+
+@router.post("/signup", response_model=Message)
+def register_user(request: Request, session: SessionDep, user_in: UserRegister) -> Any:
     """
     Create new user without the need to be logged in.
+
+    The response is identical whether or not the email is already registered so
+    that signup cannot be used to discover which addresses have accounts.
     """
+    ip = rate_limit.client_ip(request)
+    rate_limit.enforce(f"signup-ip:{ip}", settings.SIGNUP_RATE_LIMIT_PER_IP)
     user = crud.get_user_by_email(session=session, email=user_in.email)
     if user:
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this email already exists in the system",
-        )
+        logger.info("signup_existing_email ip=%s", ip)
+        if settings.emails_enabled:
+            send_email(
+                email_to=user.email,
+                subject=f"{settings.PROJECT_NAME} - Sign-up attempt",
+                html_content=(
+                    "<p>Someone tried to create an account with this email address. "
+                    "If this was you, log in or use password recovery instead. "
+                    "Otherwise you can ignore this message.</p>"
+                ),
+            )
+        return Message(message=SIGNUP_MESSAGE)
     user_create = UserCreate.model_validate(user_in)
-    user = crud.create_user(session=session, user_create=user_create)
-    return user
+    crud.create_user(session=session, user_create=user_create)
+    return Message(message=SIGNUP_MESSAGE)
 
 
 @router.get("/{user_id}", response_model=UserPublic)

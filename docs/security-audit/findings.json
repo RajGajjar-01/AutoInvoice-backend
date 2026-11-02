@@ -1,0 +1,798 @@
+[
+ {
+  "verdict": "confirmed",
+  "fingerprint": "AI-001-jwt-token-type-confusion",
+  "title": "Access and refresh JWTs are interchangeable, so a short-lived access token can be refreshed indefinitely",
+  "description": "Access, refresh and password-reset tokens are all HS256 JWTs signed with SECRET_KEY, and no verifier checks the token type. POST /api/v1/login/refresh accepts a 15-minute access token placed in the refresh_token cookie and mints a new access token, which can be fed back again, giving an unbounded session from one stolen access token. get_current_user also accepts a refresh token as a bearer access token, and a reset token used as a bearer token causes an unhandled 500.",
+  "root_cause": "create_access_token emits only {exp, sub}; create_refresh_token adds refresh=True but nothing reads it. /login/refresh and get_current_user verify only signature and exp, then parse sub through TokenPayload, which declares only sub.",
+  "intended_behavior": "/login/refresh accepts only refresh tokens and protected endpoints accept only access tokens, so a leaked access token expires after ACCESS_TOKEN_EXPIRE_MINUTES and sessions are bounded by REFRESH_TOKEN_EXPIRE_DAYS.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/routes/login.py",
+    "line": 84,
+    "scope": "refresh_token (POST /api/v1/login/refresh)",
+    "description": "Reads the client-controlled refresh_token cookie."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/login.py",
+    "line": 100,
+    "scope": "refresh_token",
+    "description": "jwt.decode checks only signature and exp; the refresh claim is never checked and TokenPayload keeps only sub."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/login.py",
+    "line": 111,
+    "scope": "refresh_token",
+    "description": "Only user existence and is_active are checked."
+   },
+   {
+    "kind": "sink",
+    "file": "app/api/routes/login.py",
+    "line": 118,
+    "scope": "refresh_token",
+    "description": "A fresh access token is minted and returned; it can be resubmitted as refresh_token without limit."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/core/security.py",
+    "line": 24,
+    "description": "Access token claims are only {exp, sub}, signed with the same key and algorithm as refresh tokens."
+   },
+   {
+    "file": "app/core/security.py",
+    "line": 36,
+    "description": "Refresh token adds refresh=True, but no verifier reads it."
+   },
+   {
+    "file": "app/api/deps.py",
+    "line": 49,
+    "description": "get_current_user decodes any JWT without a type check (harness C1: refresh token accepted as bearer, 200)."
+   },
+   {
+    "file": "app/models.py",
+    "line": 123,
+    "description": "TokenPayload declares only sub, so type claims are dropped."
+   },
+   {
+    "file": "app/utils.py",
+    "line": 109,
+    "description": "Reset token uses the same key with sub=email and no type claim; used as bearer it returns 500 (harness C9)."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "The attacker must already hold one valid, unexpired access token for the victim."
+   },
+   {
+    "kind": "data_state",
+    "description": "The victim account must still exist and be active."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "An attacker who briefly obtained a victim's 15-minute access token and wants to keep the session past its expiry.",
+   "payloads": [
+    "POST /api/v1/login/refresh with Cookie: refresh_token=<victim access_token JWT>",
+    "POST /api/v1/login/refresh with Cookie: refresh_token=<access_token returned by the previous refresh>"
+   ],
+   "instructions": [
+    "Log in as a dummy victim and take access_token from the JSON body.",
+    "Send POST /api/v1/login/refresh with that access token in the refresh_token cookie.",
+    "Observe 200 and a new access_token; repeat before each expiry to keep the session alive indefinitely."
+   ],
+   "observed_result": "Sandboxed local harness (agents/parent-hunter/artifacts/poc-baseline.json): C2 access-as-refresh returned 200 with a minted token; C1 refresh-as-bearer returned 200 as the victim; C9 reset-as-bearer returned 500. After the fix (agents/parent-fixcheck/artifacts/poc-fixed.json) C1, C2 and C9 return 403."
+  },
+  "remediation": {
+   "strategy": "Add an explicit type claim (access/refresh/password_reset) plus iat/nbf/jti to every token, require exp/iat/sub/type at decode, and enforce the expected type in each verifier through one decode_token helper. Rotate the refresh token on use. Regression tests: tests/api/routes/test_security.py::test_refresh_token_rejected_as_access_token, test_access_token_rejected_as_refresh_token, test_reset_token_rejected_as_access_token.",
+   "code_changes": [
+    {
+     "file_name": "app/core/security.py",
+     "fixed_code": "def decode_token(token, expected_type):\n    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM], options={\"require\": [\"exp\", \"iat\", \"sub\", \"type\"]})\n    if payload.get(\"type\") != expected_type:\n        raise InvalidTokenError(\"Unexpected token type\")\n    return payload"
+    },
+    {
+     "file_name": "app/api/deps.py",
+     "fixed_code": "def user_from_token(session, token, expected_type):\n    payload = security.decode_token(token, expected_type)\n    ..."
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Requires prior theft of a valid access token, though the token is also returned in the JSON login body."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Defeats the session-expiry control: one stolen access token becomes a persistent session for that victim's account."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Source shows no type check in either verifier, and the sandboxed harness exercised the exact path."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "AI-002-no-token-revocation-on-credential-change",
+  "title": "Access and refresh tokens stay valid after password change, password reset and logout",
+  "description": "Sessions are stateless JWTs with no server-side binding to the user's credentials. Changing or resetting the password only replaces hashed_password, and logout only deletes browser cookies, so previously issued access tokens (15 min) and refresh tokens (7 days, unbounded with AI-001) keep working. An attacker holding stolen tokens survives the victim's password rotation.",
+  "root_cause": "Tokens carry only sub/exp, and get_current_user and /login/refresh check only that the user exists and is active. Nothing binds a token to a credential version, so password change, reset and logout cannot invalidate issued tokens.",
+  "intended_behavior": "Password change, password reset and logout invalidate previously issued access and refresh tokens.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/routes/users.py",
+    "line": 102,
+    "scope": "update_password_me (PATCH /api/v1/users/me/password)",
+    "description": "The victim changes their password to recover from compromise."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/users.py",
+    "line": 117,
+    "scope": "update_password_me",
+    "description": "Only hashed_password is replaced; no token version or denylist is updated."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/login.py",
+    "line": 111,
+    "scope": "refresh_token",
+    "description": "Old refresh tokens are validated only by user existence and is_active."
+   },
+   {
+    "kind": "sink",
+    "file": "app/api/routes/login.py",
+    "line": 118,
+    "scope": "refresh_token",
+    "description": "A new access token is minted for the holder of the pre-change refresh token."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/api/deps.py",
+    "line": 58,
+    "description": "get_current_user authorizes any validly signed token for an existing active user, with no credential-version comparison."
+   },
+   {
+    "file": "app/api/routes/login.py",
+    "line": 186,
+    "description": "reset_password updates only the password through crud.update_user."
+   },
+   {
+    "file": "app/api/routes/login.py",
+    "line": 139,
+    "description": "logout only deletes cookies; the tokens stay valid server-side."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "The attacker previously obtained the victim's access or refresh token."
+   },
+   {
+    "kind": "user_interaction",
+    "description": "The victim changes or resets the password, or logs out, expecting other sessions to end."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "An attacker holding a victim's stolen tokens after the victim rotates the password.",
+   "payloads": [
+    "PATCH /api/v1/users/me/password {\"current_password\":\"victim-pass-123\",\"new_password\":\"victim-pass-456\"}",
+    "GET /api/v1/users/me with Authorization: Bearer <pre-change access_token>",
+    "POST /api/v1/login/refresh with Cookie: refresh_token=<pre-change refresh_token>"
+   ],
+   "instructions": [
+    "Log in as a dummy victim and record both tokens.",
+    "Change the victim's password.",
+    "Reuse the old access token at /users/me and the old refresh token at /login/refresh."
+   ],
+   "observed_result": "Sandboxed harness C3 (poc-baseline.json): both returned 200 after the password change. After the fix (poc-fixed.json) both return 403."
+  },
+  "remediation": {
+   "strategy": "Add an integer token_version column to User (Alembic migration b7c1d2e3f4a5), embed it as the ver claim in access and refresh tokens, reject tokens whose ver differs from the user's current value, and increment it on password change, password reset, logout, and admin changes to email, password, is_active or is_superuser. Regression tests: test_tokens_revoked_after_password_change, test_tokens_revoked_after_logout, test_reset_password_revokes_sessions.",
+   "code_changes": [
+    {
+     "file_name": "app/api/deps.py",
+     "fixed_code": "if token_data.ver != user.token_version:\n    raise credentials_exception()"
+    },
+    {
+     "file_name": "app/crud.py",
+     "fixed_code": "def set_user_password(*, session, db_user, password):\n    db_user.hashed_password = get_password_hash(password)\n    db_user.token_version += 1\n    ..."
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Only matters after a token has already been stolen."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Defeats password rotation and logout as session-eviction controls for the affected account."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "No revocation mechanism exists in source, and the sandboxed harness demonstrated both token types still working."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "AI-003-reset-token-replay",
+  "title": "Password-reset tokens are reusable for 48 hours and survive the reset they authorize",
+  "description": "The reset token is a stateless JWT valid for 48 hours. POST /api/v1/reset-password/ records no use and the token is not bound to the current password hash, so after the legitimate user resets, the same link still works for the rest of the window. Anyone who later sees the link (mailbox, browser history, logs) can set a new password and take over the account.",
+  "root_cause": "generate_password_reset_token includes no single-use binding, and verify_password_reset_token and reset_password have no server-side state that a completed reset would change.",
+  "intended_behavior": "A reset token authorizes exactly one password change, becomes invalid once the password changes, and expires after a short window.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/routes/login.py",
+    "line": 172,
+    "scope": "reset_password (POST /api/v1/reset-password/)",
+    "description": "An unauthenticated caller submits {token, new_password}."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/login.py",
+    "line": 177,
+    "scope": "reset_password",
+    "description": "verify_password_reset_token checks only signature and expiry and returns sub=email."
+   },
+   {
+    "kind": "sink",
+    "file": "app/api/routes/login.py",
+    "line": 187,
+    "scope": "reset_password",
+    "description": "crud.update_user overwrites hashed_password with the caller-chosen password; this can happen again with the same token."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/utils.py",
+    "line": 109,
+    "description": "Reset token claims are only exp, nbf and sub=email."
+   },
+   {
+    "file": "app/core/config.py",
+    "line": 86,
+    "description": "EMAIL_RESET_TOKEN_EXPIRE_HOURS = 48."
+   },
+   {
+    "file": "app/utils.py",
+    "line": 71,
+    "description": "The token travels in a URL query string, so it persists in mail and browser history."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "user_interaction",
+    "description": "The victim requested a reset, so a valid token was emailed."
+   },
+   {
+    "kind": "data_state",
+    "description": "The attacker obtains the used link within its validity window."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "An unauthenticated attacker who obtains a victim's already-used reset link.",
+   "payloads": [
+    "POST /api/v1/reset-password/ {\"token\":\"<reset JWT>\",\"new_password\":\"attacker-set-1\"}",
+    "POST /api/v1/reset-password/ {\"token\":\"<same reset JWT>\",\"new_password\":\"attacker-set-2\"}"
+   ],
+   "instructions": [
+    "Generate a reset token for a dummy victim as /password-recovery does.",
+    "Submit it once (the victim's legitimate reset).",
+    "Submit the same token again with a different password."
+   ],
+   "observed_result": "Sandboxed harness C4 (poc-baseline.json): first=200, second=200, and the attacker's password then logged in. After the fix (poc-fixed.json): first=200, second=400."
+  },
+  "remediation": {
+   "strategy": "Bind the reset token to an HMAC fingerprint of the user's current password hash (pwd claim), give it type=password_reset and sub=user id, compare the fingerprint with hmac.compare_digest before resetting, shorten EMAIL_RESET_TOKEN_EXPIRE_HOURS to 1, and revoke sessions on reset. Regression test: test_reset_token_is_single_use.",
+   "code_changes": [
+    {
+     "file_name": "app/utils.py",
+     "fixed_code": "def verify_password_reset_token(*, session, token):\n    payload = security.decode_token(token, security.TOKEN_TYPE_PASSWORD_RESET)\n    user = session.get(User, uuid.UUID(payload[\"sub\"]))\n    if not user or not hmac.compare_digest(payload.get(\"pwd\", \"\"), security.password_fingerprint(user.hashed_password)):\n        return None\n    return user"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "The attacker must obtain an already-used reset link within the window."
+   },
+   "impact": {
+    "score": "high",
+    "reason": "A successful replay sets the victim's password: full takeover of that account."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "No single-use binding in source; the sandboxed harness reset twice with one token."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "AI-004-no-auth-throttling",
+  "title": "No application-level throttling or lockout on login, password recovery and signup",
+  "description": "The unauthenticated login, password-recovery and signup endpoints have no rate limit or lockout in the repository. The sandboxed harness sent 30 wrong passwords then logged in successfully. Whether online guessing is practical depends on a fronting proxy, WAF or edge rate limit that the repository does not define. Fixed in-app regardless: per-IP and per-IP+account limits now return 429.",
+  "claimed_root_cause": "login_access_token calls crud.authenticate on every request without counting failures, and no throttling middleware exists; recover_password and register_user are likewise unthrottled.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/routes/login.py",
+    "line": 26,
+    "scope": "login_access_token",
+    "description": "Unauthenticated POST /login/access-token takes username and password."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/login.py",
+    "line": 35,
+    "scope": "login_access_token",
+    "description": "crud.authenticate is called with no attempt counter or lockout."
+   },
+   {
+    "kind": "sink",
+    "file": "app/crud.py",
+    "line": 52,
+    "scope": "authenticate",
+    "description": "Each guess is checked against the stored hash; failures are not recorded."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/api/routes/login.py",
+    "line": 38,
+    "description": "A failed login raises a plain 400 and records nothing."
+   },
+   {
+    "file": "app/main.py",
+    "line": 51,
+    "description": "CORSMiddleware is the only middleware."
+   },
+   {
+    "file": "app/api/routes/login.py",
+    "line": 148,
+    "description": "POST /password-recovery/{email} is unthrottled."
+   },
+   {
+    "file": "app/api/routes/users.py",
+    "line": 145,
+    "description": "POST /users/signup is unthrottled."
+   }
+  ],
+  "blockers": [
+   "The repository does not show whether a reverse proxy, WAF, API gateway or edge rate limit throttles these endpoints in deployment.",
+   "The local check shows no in-app throttling across 30 failures, not an account compromise, which depends on password strength and the attack rate the deployment allows."
+  ],
+  "validation_plan": {
+   "local": "Already established: poc-baseline.json C5 shows no in-app throttling; poc-fixed.json C5 shows 429 after the fix.",
+   "deployment": "Check production routing (proxy, WAF or CDN rules) for rate limits on POST /api/v1/login/access-token, /api/v1/password-recovery/* and /api/v1/users/signup, or send a bounded burst of wrong passwords against a dedicated test account in staging and look for 429 or blocking. Note the in-app limiter is per process, so multi-worker or multi-replica deployments still need a shared limit."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "AI-005-cookie-precedence-over-bearer",
+  "title": "access_token cookie takes precedence over the Authorization bearer header",
+  "description": "get_token returns the access_token cookie when present and otherwise uses the Authorization header. Harness C6 showed a client holding a cookie for one user and a bearer token for another acting as the cookie user.",
+  "claimed_root_cause": "app/api/deps.py checks the cookie before the bearer header, so an explicit Authorization header is ignored whenever a cookie is present.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/deps.py",
+    "line": 29,
+    "scope": "get_token",
+    "description": "get_token receives both the cookie and the bearer token."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/deps.py",
+    "line": 33,
+    "scope": "get_token",
+    "description": "A non-empty cookie is returned and the Authorization header is not used."
+   },
+   {
+    "kind": "sink",
+    "file": "app/api/deps.py",
+    "line": 47,
+    "scope": "get_current_user",
+    "description": "The chosen token is resolved to the request principal."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/api/deps.py",
+    "line": 33,
+    "description": "`if access_token: return access_token` precedes the authorization branch."
+   },
+   {
+    "file": "app/api/deps.py",
+    "line": 49,
+    "description": "Either token must still be a valid signed JWT for an active user."
+   }
+  ],
+  "reason": "No lower-trust principal crosses a boundary: both credentials were valid tokens held by the same client, so precedence never grants authority the caller lacks. It is a correctness bug, and the cause of 17 order-dependent test failures. It was fixed anyway: the Authorization header now takes precedence."
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "AI-006-signup-account-enumeration",
+  "title": "Public signup reveals whether an email address is registered",
+  "description": "POST /api/v1/users/signup returns 400 'The user with this email already exists in the system' for registered emails, while unregistered emails succeed. This lets an unauthenticated actor test which addresses have accounts, bypassing the anti-enumeration design used in password recovery, reset and login.",
+  "root_cause": "register_user raises a distinct 400 when the email exists instead of returning a response that is independent of account existence.",
+  "intended_behavior": "Consistent with the anti-enumeration design in login.py and crud.py, signup does not reveal whether an email is registered.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/routes/users.py",
+    "line": 145,
+    "scope": "register_user",
+    "description": "Unauthenticated POST /users/signup with an attacker-chosen email."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/users.py",
+    "line": 150,
+    "scope": "register_user",
+    "description": "crud.get_user_by_email looks up the email."
+   },
+   {
+    "kind": "sink",
+    "file": "app/api/routes/users.py",
+    "line": 152,
+    "scope": "register_user",
+    "description": "For an existing user a distinguishing 400 is returned."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/api/routes/users.py",
+    "line": 154,
+    "description": "The distinct error detail."
+   },
+   {
+    "file": "app/api/routes/login.py",
+    "line": 155,
+    "description": "Comment showing anti-enumeration is an intended control."
+   },
+   {
+    "file": "app/crud.py",
+    "line": 48,
+    "description": "authenticate equalizes timing for unknown users."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "None; the endpoint is unauthenticated."
+   },
+   {
+    "kind": "data_state",
+    "description": "The probed email must be registered to get the distinguishing 400."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "An unauthenticated actor with a list of candidate email addresses.",
+   "payloads": [
+    "POST /api/v1/users/signup {\"email\": \"<candidate-email>\", \"password\": \"whatever-123\"}"
+   ],
+   "instructions": [
+    "Against a sandboxed instance with a registered dummy account, sign up with that email.",
+    "Observe 400 with the 'already exists' detail, versus 200 for an unregistered email."
+   ],
+   "observed_result": "Sandboxed harness C7 (poc-baseline.json): 400 'The user with this email already exists in the system'. After the fix (poc-fixed.json): both existing and new emails return 200 with an identical generic message."
+  },
+  "remediation": {
+   "strategy": "Return the same generic Message for existing and new emails, notify the existing owner by email instead of erroring, normalize email case, and rate-limit signup per IP. Regression test: test_signup_does_not_reveal_existing_accounts. This changes the signup response from UserPublic to Message, so the frontend must be updated.",
+   "code_changes": [
+    {
+     "file_name": "app/api/routes/users.py",
+     "fixed_code": "@router.post(\"/signup\", response_model=Message)\ndef register_user(request, session, user_in):\n    rate_limit.enforce(...)\n    if crud.get_user_by_email(...):\n        # notify owner by email\n        return Message(message=SIGNUP_MESSAGE)\n    crud.create_user(...)\n    return Message(message=SIGNUP_MESSAGE)"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "high",
+    "reason": "One unauthenticated request per email gives a deterministic answer."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Only account existence is disclosed, which helps phishing and credential stuffing."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Direct source path, reproduced in the sandbox."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "AI-007-unbounded-pagination-limit",
+  "title": "List endpoints accept an unbounded limit parameter",
+  "description": "GET /items/ and GET /users/ declare limit: int = 100 with no upper bound; harness C8 got 200 for limit=100000000.",
+  "claimed_root_cause": "The limit query parameter has no le= constraint.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/routes/items.py",
+    "line": 13,
+    "scope": "read_items",
+    "description": "Authenticated GET /items/ accepts skip and limit."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/items.py",
+    "line": 37,
+    "scope": "read_items",
+    "description": "For non-superusers the query is filtered to the caller's own items."
+   },
+   {
+    "kind": "sink",
+    "file": "app/api/routes/items.py",
+    "line": 40,
+    "scope": "read_items",
+    "description": "limit is passed to SQL LIMIT."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/api/routes/items.py",
+    "line": 15,
+    "description": "limit has no maximum."
+   },
+   {
+    "file": "app/api/routes/users.py",
+    "line": 34,
+    "description": "GET /users/ requires a superuser."
+   }
+  ],
+  "reason": "No boundary is crossed: results are bounded by the caller's own rows or reachable only by a superuser, and no effect on a shared resource was shown. Kept as hardening and fixed anyway (skip>=0, 1<=limit<=MAX_PAGE_SIZE; test_read_users_limit_is_capped)."
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "AI-008-insecure-default-environment",
+  "title": "ENVIRONMENT defaulted to \"local\", turning on dev-only behaviour if a deployment did not set it",
+  "description": "Settings.ENVIRONMENT defaulted to \"local\". That mounted the unauthenticated POST /api/v1/private/users/, set auth cookies without Secure, and only warned (instead of refusing to start) on SECRET_KEY/POSTGRES_PASSWORD/FIRST_SUPERUSER_PASSWORD = \"changethis\". The Dockerfile set neither ENVIRONMENT nor SECRET_KEY. Sandboxed checks C10 and C12 confirmed the code behaviour. Whether any deployment actually runs that way is not in the repository. Fixed regardless: the default is now production, the Dockerfile sets ENVIRONMENT=production, and short or default secrets fail startup outside local.",
+  "claimed_root_cause": "Security controls depend on an ENVIRONMENT setting that failed open, defaulting to the least-secure value.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "Dockerfile",
+    "line": 46,
+    "scope": "container CMD",
+    "description": "The container starts with no ENVIRONMENT or SECRET_KEY in the image."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/core/config.py",
+    "line": 38,
+    "scope": "Settings.ENVIRONMENT",
+    "description": "Defaults to \"local\" when unset."
+   },
+   {
+    "kind": "sink",
+    "file": "app/core/config.py",
+    "line": 103,
+    "scope": "Settings._check_default_secret",
+    "description": "In local mode \"changethis\" secrets only warn, so a known SECRET_KEY would allow forging any user's JWT."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/api/main.py",
+    "line": 13,
+    "description": "The private router is mounted when local (C12: unauthenticated 200)."
+   },
+   {
+    "file": "app/api/routes/login.py",
+    "line": 56,
+    "description": "secure=settings.ENVIRONMENT != \"local\" on auth cookies."
+   },
+   {
+    "file": "app/core/config.py",
+    "line": 33,
+    "description": "The built-in SECRET_KEY default is random, so the weak secret requires an operator to supply \"changethis\" (for example by copying .env.local)."
+   }
+  ],
+  "blockers": [
+   "No production manifest is in the repository, so it is unknown whether any deployment ran with ENVIRONMENT unset or local.",
+   "It is unknown whether any deployment supplied \"changethis\" secrets."
+  ],
+  "validation_plan": {
+   "local": "C10/C12 in poc-baseline.json establish the code behaviour; poc-fixed.json C10 shows the weak secret is now rejected when ENVIRONMENT is unset.",
+   "deployment": "For each deployment, check the effective ENVIRONMENT (must be staging or production) and that SECRET_KEY, POSTGRES_PASSWORD and FIRST_SUPERUSER_PASSWORD are not \"changethis\". If any instance ran with a known SECRET_KEY, rotate it, since all issued tokens were forgeable."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "AI-009-csrf-cookie-auth",
+  "title": "Cookie-authenticated mutations relied only on SameSite=Lax, with no CSRF token or Origin check",
+  "description": "get_token accepted the ambient access_token cookie for every method with no CSRF token or Origin check. Explicit SameSite=Lax blocks ordinary cross-site CSRF in modern browsers, but a same-site, cross-origin attacker (a sibling subdomain or another port on the same host) can still send CORS-simple POSTs such as creating items or logging the user out. Whether such an origin exists depends on deployment topology. Fixed regardless: cookie-authenticated unsafe requests now require an Origin/Referer in CORS origins + CSRF_TRUSTED_ORIGINS, and the refresh cookie is SameSite=Strict.",
+  "claimed_root_cause": "Ambient-cookie authentication for unsafe methods with SameSite=Lax as the only CSRF defence.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/routes/items.py",
+    "line": 60,
+    "scope": "create_item",
+    "description": "State-changing POST authenticated through CurrentUser."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/deps.py",
+    "line": 33,
+    "scope": "get_token",
+    "description": "The cookie is accepted for any method with no Origin check."
+   },
+   {
+    "kind": "sink",
+    "file": "app/api/routes/login.py",
+    "line": 57,
+    "scope": "login_access_token",
+    "description": "SameSite=Lax is the only CSRF control, which does not separate same-site sibling origins."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/main.py",
+    "line": 51,
+    "description": "CORS limits non-simple requests but does not stop simple POSTs being sent."
+   },
+   {
+    "file": "app/api/routes/login.py",
+    "line": 134,
+    "description": "POST /login/logout is CORS-simple and cookie-authenticated."
+   }
+  ],
+  "blockers": [
+   "The production domain topology (other origins under the same registrable domain, and their trust level) is not in the repository.",
+   "The supported browser set (legacy browsers without SameSite support) is not stated."
+  ],
+  "validation_plan": {
+   "local": "In a headless browser logged in as a dummy user, send a credentialed fetch POST to /api/v1/items/ from a cross-site page and from a same-site sibling origin on loopback, and compare. After the fix both return 403 unless the origin is trusted (see test_cookie_auth_requires_trusted_origin).",
+   "deployment": "List the production API host and every origin under the same registrable domain, and whether any is less trusted; set CSRF_TRUSTED_ORIGINS to the exact frontend origins."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "AI-010-email-change-without-reauth",
+  "title": "Account email can be changed with only a bearer token, letting a token thief take over the account through password recovery",
+  "description": "PATCH /api/v1/users/me accepted a new email with only a uniqueness check, with no current password and no ownership verification, while PATCH /users/me/password does require the current password. Someone holding a victim's access token could switch the email to an address they control, then use password recovery to set a new password. The victim is permanently locked out.",
+  "root_cause": "update_user_me applied user_in.model_dump(exclude_unset=True), including email, directly to current_user without re-authentication, and password recovery trusts the stored email as the recovery channel.",
+  "intended_behavior": "Changing the account's login and recovery identifier requires the same proof as changing the password (the current password).",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/routes/users.py",
+    "line": 80,
+    "scope": "update_user_me",
+    "description": "PATCH /users/me, authenticated only by CurrentUser."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/users.py",
+    "line": 95,
+    "scope": "update_user_me",
+    "description": "The body-supplied email is written and committed."
+   },
+   {
+    "kind": "propagation",
+    "file": "app/api/routes/login.py",
+    "line": 153,
+    "scope": "recover_password",
+    "description": "Unauthenticated recovery looks up the new email and mails a reset token to it."
+   },
+   {
+    "kind": "sink",
+    "file": "app/api/routes/login.py",
+    "line": 187,
+    "scope": "reset_password",
+    "description": "The attacker's chosen password replaces the victim's credentials."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/api/routes/users.py",
+    "line": 109,
+    "description": "update_password_me requires the current password, so the application's own re-authentication rule is skipped for email changes."
+   },
+   {
+    "file": "app/utils.py",
+    "line": 39,
+    "description": "send_email requires SMTP to be configured for the recovery step."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "The attacker holds a valid access token for the victim."
+   },
+   {
+    "kind": "system_configuration",
+    "description": "SMTP is configured so password recovery sends mail."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "A token thief who does not know the victim's password and controls attacker@example.test.",
+   "payloads": [
+    "PATCH /api/v1/users/me {\"email\":\"attacker@example.test\"} with Authorization: Bearer <victim token>",
+    "POST /api/v1/password-recovery/attacker@example.test",
+    "POST /api/v1/reset-password/ {\"token\":\"<emailed token>\",\"new_password\":\"AttackerChosen123\"}"
+   ],
+   "instructions": [
+    "PATCH the victim's email using only the token.",
+    "Request password recovery for the new address.",
+    "Reset the password using the emailed token."
+   ],
+   "observed_result": "Established by an independent source trace only, with no local run of the full chain (SMTP is not available in the sandbox). After the fix, tests/api/routes/test_users.py::test_update_user_me_email_requires_current_password shows the email change is refused (400) without the correct current password."
+  },
+  "remediation": {
+   "strategy": "Require current_password on PATCH /users/me whenever the email changes, normalize email case, and log the change. A follow-up should send a confirmation to the new address and a notice to the old one.",
+   "code_changes": [
+    {
+     "file_name": "app/api/routes/users.py",
+     "fixed_code": "if user_in.email and crud.normalize_email(user_in.email) != current_user.email:\n    if not (user_in.current_password and verify_password(user_in.current_password, current_user.hashed_password)[0]):\n        raise HTTPException(400, \"Current password is required to change the email address\")"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs a stolen access token and SMTP configured."
+   },
+   "impact": {
+    "score": "high",
+    "reason": "Permanent takeover of the victim's account."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "The full path is explicit in source, but it was verified by source trace rather than a local run."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "AI-011-signup-without-email-verification",
+  "title": "Self-signup creates an active account without verifying the email",
+  "description": "POST /api/v1/users/signup creates an active, non-superuser account for any unused email without proof of ownership.",
+  "claimed_root_cause": "register_user inserts the account with is_active defaulting to True and no verification step.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "app/api/routes/users.py",
+    "line": 145,
+    "scope": "register_user",
+    "description": "Unauthenticated signup."
+   },
+   {
+    "kind": "sink",
+    "file": "app/api/routes/users.py",
+    "line": 157,
+    "scope": "register_user",
+    "description": "An active account is stored under the claimed email."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "app/models.py",
+    "line": 26,
+    "description": "UserRegister carries no privilege fields."
+   },
+   {
+    "file": "app/crud.py",
+    "line": 34,
+    "description": "No route grants authorization based on email address or domain."
+   }
+  ],
+  "reason": "No boundary is crossed in source: a self-registered account gets only its own empty, non-privileged scope, and the real owner can reclaim the address through password recovery. Email verification is recommended as hardening (see REPORT.md)."
+ }
+]

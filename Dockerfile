@@ -43,4 +43,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --package app
 
+# Run as an unprivileged user.
+RUN useradd --system --uid 10001 --no-create-home appuser \
+    && chown -R appuser /app
+USER appuser
+
+ENV ENVIRONMENT=production
+
 CMD ["fastapi", "run", "--workers", "4", "app/main.py"]

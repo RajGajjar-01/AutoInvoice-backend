@@ -97,7 +97,7 @@ docker compose up -d
 alembic upgrade head
 
 # 4. Start FastAPI
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ---
@@ -139,3 +139,16 @@ AutoInvoice-backend/
 ├── start.bat          # 🚀 One-click Windows startup
 └── stop.bat           # 🛑 Windows shutdown
 ```
+
+---
+
+## Security configuration
+
+See [`docs/security-audit/REPORT.md`](docs/security-audit/REPORT.md) for the latest security audit.
+
+- **`ENVIRONMENT` defaults to `production`.** For local development set `ENVIRONMENT=local` in `.env` (copy `.env.local` to `.env`). Outside `local`, startup fails if `SECRET_KEY`, `POSTGRES_PASSWORD` or `FIRST_SUPERUSER_PASSWORD` is `changethis`, if `SECRET_KEY` is shorter than 32 characters, or if CORS origins contain `*`. Generate a key with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+- **Apply migrations** after pulling: `alembic upgrade head` adds `user.token_version`, which is used to revoke sessions. The app also adds the column automatically on startup if it is missing.
+- **Sessions:** logout, password change/reset, and admin changes to a user's email, password, active or superuser flags revoke all of that user's tokens.
+- **CSRF:** cookie-authenticated `POST/PUT/PATCH/DELETE` requests must send an `Origin` (or `Referer`) that is in `BACKEND_CORS_ORIGINS`, `FRONTEND_HOST` or `CSRF_TRUSTED_ORIGINS`. Requests using `Authorization: Bearer` are unaffected.
+- **Rate limiting** (`RATE_LIMIT_*` settings) is in-process. With several workers or replicas, also enforce a limit at your proxy or edge.
+- **API changes:** `POST /users/signup` now returns `{"message": ...}` for both new and existing emails (no account enumeration). `PATCH /users/me` requires `current_password` when changing `email`. List endpoints accept `limit` from 1 to 100.

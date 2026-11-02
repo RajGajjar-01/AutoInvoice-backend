@@ -1,0 +1,468 @@
+[
+ {
+  "coverage_id": "app%2Fapi%2Froutes%2Fitems.py%23POST%20%2Fitems%2F::app%2Fapi%2Fdeps.py%23get_token::profile%2Fquick%2Fall-in-scope-subsystems::WEB-PROTOCOL-AND-AUTH.md%23Browser-session%20attack%20classes",
+  "canonical_refs": {
+   "surface": "app/api/routes/items.py#POST /items/",
+   "boundary": "app/api/deps.py#get_token",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Browser-session attack classes"
+  },
+  "surface": "Cookie-authenticated mutations",
+  "boundary": "Browser session (cookie) boundary",
+  "subsystem": "All in-scope subsystems (quick profile)",
+  "attack_class": "Browser-session attack classes",
+  "starting_paths": [
+   "app/api/deps.py",
+   "app/api/routes/login.py",
+   "app/main.py"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Browser-session attack classes",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "WEB-PROTOCOL-AND-AUTH.md#Federated-identity attack classes",
+    "reason": "No OAuth/OIDC/SAML in source."
+   },
+   {
+    "block": "WEB-PROTOCOL-AND-AUTH.md#API-key and mTLS attack classes",
+    "reason": "No API keys or mTLS in source."
+   }
+  ],
+  "prior_status": "none",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "parent-hunter",
+  "reviewed_paths": [
+   "app/api/deps.py",
+   "app/api/routes/items.py",
+   "app/api/routes/login.py",
+   "app/main.py"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "verifier-config-csrf",
+    "reviewed_paths": [
+     "app/api/deps.py",
+     "app/api/routes/login.py",
+     "app/main.py",
+     "app/api/routes/items.py"
+    ],
+    "invariant": "Cross-origin requests cannot ride ambient cookies",
+    "method": "source",
+    "result": "Needs validation: depends on same-site topology",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "AI-009-csrf-cookie-auth"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "app%2Fapi%2Froutes%2Flogin.py%23POST%20%2Flogin%2F%2A%20and%20%2Freset-password%2F::app%2Fapi%2Fdeps.py%23get_current_user::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+  "canonical_refs": {
+   "surface": "app/api/routes/login.py#POST /login/* and /reset-password/",
+   "boundary": "app/api/deps.py#get_current_user",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+  },
+  "surface": "Login, refresh, logout and reset endpoints",
+  "boundary": "JWT session verification",
+  "subsystem": "All in-scope subsystems (quick profile)",
+  "attack_class": "Cryptography and secrets",
+  "starting_paths": [
+   "app/api/routes/login.py",
+   "app/api/deps.py",
+   "app/core/security.py",
+   "app/utils.py"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Browser-session attack classes",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "WEB-PROTOCOL-AND-AUTH.md#Federated-identity attack classes",
+    "reason": "No OAuth/OIDC/SAML in source."
+   },
+   {
+    "block": "WEB-PROTOCOL-AND-AUTH.md#API-key and mTLS attack classes",
+    "reason": "No API keys or mTLS in source."
+   }
+  ],
+  "prior_status": "none",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "parent-hunter",
+  "reviewed_paths": [
+   "app/api/deps.py",
+   "app/api/routes/login.py",
+   "app/api/routes/users.py",
+   "app/core/security.py",
+   "app/models.py",
+   "app/utils.py"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "parent-hunter",
+    "reviewed_paths": [
+     "app/api/routes/login.py",
+     "app/api/deps.py",
+     "app/core/security.py",
+     "app/utils.py"
+    ],
+    "invariant": "Tokens are only accepted for their intended purpose and are revoked on credential change",
+    "method": "local",
+    "result": "Token type confusion, no revocation and reset replay reproduced (C1-C4, C9)",
+    "artifact": "agents/parent-hunter/artifacts/poc-baseline.json"
+   },
+   {
+    "agent_id": "verifier-auth-tokens",
+    "reviewed_paths": [
+     "app/api/routes/login.py",
+     "app/api/deps.py",
+     "app/core/security.py",
+     "app/utils.py",
+     "app/api/routes/users.py",
+     "app/models.py"
+    ],
+    "invariant": "Independent re-trace of AI-001..003",
+    "method": "source",
+    "result": "Confirmed AI-001, AI-002, AI-003",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "AI-001-jwt-token-type-confusion",
+   "AI-002-no-token-revocation-on-credential-change",
+   "AI-003-reset-token-replay"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "app%2Fapi%2Froutes%2Flogin.py%23POST%20%2Flogin%2Faccess-token::app%2Fcrud.py%23authenticate::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Business%20logic",
+  "canonical_refs": {
+   "surface": "app/api/routes/login.py#POST /login/access-token",
+   "boundary": "app/crud.py#authenticate",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Business logic"
+  },
+  "surface": "Login and signup",
+  "boundary": "Credential verification and anti-enumeration",
+  "subsystem": "All in-scope subsystems (quick profile)",
+  "attack_class": "Business logic",
+  "starting_paths": [
+   "app/api/routes/login.py",
+   "app/api/routes/users.py",
+   "app/crud.py"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [],
+  "prior_status": "none",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "parent-hunter",
+  "reviewed_paths": [
+   "Dockerfile",
+   "app/api/routes/login.py",
+   "app/api/routes/users.py",
+   "app/crud.py",
+   "app/main.py"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "parent-hunter",
+    "reviewed_paths": [
+     "app/api/routes/login.py",
+     "app/api/routes/users.py",
+     "app/crud.py"
+    ],
+    "invariant": "Unauthenticated actors cannot guess passwords at scale or enumerate accounts",
+    "method": "local",
+    "result": "30 failures then success (C5); signup enumeration (C7)",
+    "artifact": "agents/parent-hunter/artifacts/poc-baseline.json"
+   },
+   {
+    "agent_id": "verifier-abuse-api",
+    "reviewed_paths": [
+     "app/api/routes/login.py",
+     "app/api/routes/users.py",
+     "app/crud.py",
+     "app/main.py",
+     "Dockerfile"
+    ],
+    "invariant": "Independent re-trace of AI-004, AI-006",
+    "method": "source",
+    "result": "AI-004 needs_validation, AI-006 confirmed",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "AI-004-no-auth-throttling",
+   "AI-006-signup-account-enumeration"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "app%2Fapi%2Froutes%2Fusers.py%23%2Fusers%2F%2A::app%2Fapi%2Fdeps.py%23get_current_active_superuser::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "app/api/routes/users.py#/users/*",
+   "boundary": "app/api/deps.py#get_current_active_superuser",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "User and item routes",
+  "boundary": "Owner and superuser authorization",
+  "subsystem": "All in-scope subsystems (quick profile)",
+  "attack_class": "Access control",
+  "starting_paths": [
+   "app/api/routes/users.py",
+   "app/api/routes/items.py",
+   "app/models.py"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [],
+  "prior_status": "none",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "parent-hunter",
+  "reviewed_paths": [
+   "app/api/deps.py",
+   "app/api/routes/items.py",
+   "app/api/routes/login.py",
+   "app/api/routes/users.py",
+   "app/models.py",
+   "app/utils.py"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "parent-hunter",
+    "reviewed_paths": [
+     "app/api/routes/users.py",
+     "app/api/routes/items.py",
+     "app/models.py",
+     "app/api/deps.py"
+    ],
+    "invariant": "Users act only on their own resources; privilege fields are not mass-assignable",
+    "method": "local",
+    "result": "Ownership checks hold; cookie precedence (C6) and unbounded limit (C8) are not boundary crossings",
+    "artifact": "agents/parent-hunter/artifacts/poc-baseline.json"
+   },
+   {
+    "agent_id": "verifier-abuse-api",
+    "reviewed_paths": [
+     "app/api/deps.py",
+     "app/api/routes/items.py",
+     "app/api/routes/users.py"
+    ],
+    "invariant": "Independent re-trace of AI-005, AI-007",
+    "method": "source",
+    "result": "Both rejected",
+    "artifact": null
+   },
+   {
+    "agent_id": "verifier-critic-leads",
+    "reviewed_paths": [
+     "app/api/routes/users.py",
+     "app/api/routes/login.py",
+     "app/models.py",
+     "app/utils.py"
+    ],
+    "invariant": "Email change requires re-authentication",
+    "method": "source",
+    "result": "AI-010 confirmed, AI-011 rejected",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "AI-005-cookie-precedence-over-bearer",
+   "AI-007-unbounded-pagination-limit",
+   "AI-010-email-change-without-reauth",
+   "AI-011-signup-without-email-verification"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "app%2Fcore%2Fconfig.py%23Settings::app%2Fapi%2Fmain.py%23private%20router%20gate::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+  "canonical_refs": {
+   "surface": "app/core/config.py#Settings",
+   "boundary": "app/api/main.py#private router gate",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+  },
+  "surface": "Configuration and deployment",
+  "boundary": "Environment-gated controls",
+  "subsystem": "All in-scope subsystems (quick profile)",
+  "attack_class": "Feature abuse and data leakage",
+  "starting_paths": [
+   "app/core/config.py",
+   "app/api/main.py",
+   "Dockerfile",
+   "docker-compose.yml",
+   ".env.local"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+  "selected_companion_blocks": [
+   "CLOUD-AND-DEPLOYMENT.md#Core discipline"
+  ],
+  "excluded_blocks": [],
+  "prior_status": "none",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "parent-hunter",
+  "reviewed_paths": [
+   ".env.local",
+   "Dockerfile",
+   "README.md",
+   "app/api/main.py",
+   "app/core/config.py",
+   "docker-compose.yml"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "parent-hunter",
+    "reviewed_paths": [
+     "app/core/config.py",
+     "app/api/main.py"
+    ],
+    "invariant": "Unsafe dev behaviour is not enabled by default",
+    "method": "local",
+    "result": "Default local env accepts changethis secret (C10) and mounts private router (C12)",
+    "artifact": "agents/parent-hunter/artifacts/poc-baseline.json"
+   },
+   {
+    "agent_id": "verifier-config-csrf",
+    "reviewed_paths": [
+     "app/core/config.py",
+     "app/api/main.py",
+     "Dockerfile",
+     "docker-compose.yml",
+     ".env.local",
+     "README.md"
+    ],
+    "invariant": "Independent re-trace of AI-008",
+    "method": "source",
+    "result": "needs_validation: deployment env unknown",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [
+   "AI-008-insecure-default-environment"
+  ],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "app%2Futils.py%23email%20rendering::app%2Fcrud.py%23ORM%20queries::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Injection",
+  "canonical_refs": {
+   "surface": "app/utils.py#email rendering",
+   "boundary": "app/crud.py#ORM queries",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Injection"
+  },
+  "surface": "Email templates and DB queries",
+  "boundary": "Untrusted input to SQL/template/header sinks",
+  "subsystem": "All in-scope subsystems (quick profile)",
+  "attack_class": "Injection",
+  "starting_paths": [
+   "app/utils.py",
+   "app/crud.py",
+   "app/api/routes/items.py",
+   "app/api/routes/users.py"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [],
+  "prior_status": "none",
+  "attempts": [],
+  "wave": 1,
+  "status": "covered",
+  "agent_id": "parent-hunter",
+  "reviewed_paths": [
+   "app/alembic/env.py",
+   "app/api/routes/items.py",
+   "app/api/routes/users.py",
+   "app/crud.py",
+   "app/utils.py"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "coverage-critic",
+    "reviewed_paths": [
+     "app/utils.py",
+     "app/crud.py",
+     "app/api/routes/items.py",
+     "app/api/routes/users.py",
+     "app/alembic/env.py"
+    ],
+    "invariant": "No untrusted data reaches SQL, template or header sinks unsafely",
+    "method": "source",
+    "result": "Clean: ORM parameterization, fixed template names, EmailStr-validated subjects; autoescape missing (hardening only)",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [],
+  "unresolved": []
+ },
+ {
+  "coverage_id": "uv.lock%23locked%20dependencies::pyproject.toml%23dependency%20constraints::profile%2Fquick%2Fall-in-scope-subsystems::ATTACK-CLASSES.md%23Obvious%20things",
+  "canonical_refs": {
+   "surface": "uv.lock#locked dependencies",
+   "boundary": "pyproject.toml#dependency constraints",
+   "subsystem": "profile/quick/all-in-scope-subsystems",
+   "attack_class": "ATTACK-CLASSES.md#Obvious things"
+  },
+  "surface": "Dependencies",
+  "boundary": "Supply chain",
+  "subsystem": "All in-scope subsystems (quick profile)",
+  "attack_class": "Obvious things",
+  "starting_paths": [
+   "uv.lock",
+   "pyproject.toml",
+   "Dockerfile"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Obvious things",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [],
+  "prior_status": "none",
+  "attempts": [],
+  "wave": 1,
+  "status": "covered",
+  "agent_id": "parent-hunter",
+  "reviewed_paths": [
+   "Dockerfile",
+   "pyproject.toml",
+   "uv.lock"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "coverage-critic",
+    "reviewed_paths": [
+     "uv.lock",
+     "pyproject.toml",
+     "Dockerfile"
+    ],
+    "invariant": "No locked dependency has a known applicable vulnerability",
+    "method": "source",
+    "result": "No confident CVE match; emails 0.6 unmaintained (hardening)",
+    "artifact": null
+   }
+  ],
+  "result_fingerprints": [],
+  "unresolved": []
+ }
+]

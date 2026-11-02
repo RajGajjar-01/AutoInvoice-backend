@@ -1,16 +1,19 @@
+import hmac
 import logging
+import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import emails  # type: ignore
-import jwt
-from jinja2 import Template
+from jinja2 import Environment, select_autoescape
 from jwt.exceptions import InvalidTokenError
+from sqlmodel import Session
 
 from app.core import security
 from app.core.config import settings
+from app.models import User
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,7 +29,11 @@ def render_email_template(*, template_name: str, context: dict[str, Any]) -> str
     template_str = (
         Path(__file__).parent / "email-templates" / "build" / template_name
     ).read_text()
-    html_content = Template(template_str).render(context)
+    # Autoescape so user-controlled values (names, emails) cannot inject HTML.
+    env = Environment(
+        autoescape=select_autoescape(default=True, default_for_string=True)
+    )
+    html_content = env.from_string(template_str).render(context)
     return html_content
 
 
@@ -82,9 +89,7 @@ def generate_reset_password_email(email_to: str, email: str, token: str) -> Emai
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_new_account_email(
-    email_to: str, username: str, password: str
-) -> EmailData:
+def generate_new_account_email(email_to: str, username: str) -> EmailData:
     project_name = settings.PROJECT_NAME
     subject = f"{project_name} - New account for user {username}"
     html_content = render_email_template(
@@ -92,7 +97,6 @@ def generate_new_account_email(
         context={
             "project_name": settings.PROJECT_NAME,
             "username": username,
-            "password": password,
             "email": email_to,
             "link": settings.FRONTEND_HOST,
         },
@@ -100,24 +104,33 @@ def generate_new_account_email(
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_password_reset_token(email: str) -> str:
-    delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
-    now = datetime.now(timezone.utc)
-    expires = now + delta
-    exp = expires.timestamp()
-    encoded_jwt = jwt.encode(
-        {"exp": exp, "nbf": now, "sub": email},
-        settings.SECRET_KEY,
-        algorithm=security.ALGORITHM,
+def generate_password_reset_token(user: User) -> str:
+    """Create a short-lived, single-use password reset token for ``user``.
+
+    The token is bound to the user's current password hash, so it stops working
+    as soon as the password changes (including via this token).
+    """
+    return security._encode(
+        {
+            "sub": str(user.id),
+            "type": security.TOKEN_TYPE_PASSWORD_RESET,
+            "pwd": security.password_fingerprint(user.hashed_password),
+        },
+        timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS),
     )
-    return encoded_jwt
 
 
-def verify_password_reset_token(token: str) -> str | None:
+def verify_password_reset_token(*, session: Session, token: str) -> User | None:
     try:
-        decoded_token = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
-        )
-        return str(decoded_token["sub"])
-    except InvalidTokenError:
+        payload = security.decode_token(token, security.TOKEN_TYPE_PASSWORD_RESET)
+        user_id = uuid.UUID(str(payload["sub"]))
+    except (InvalidTokenError, KeyError, ValueError):
         return None
+    user = session.get(User, user_id)
+    if not user:
+        return None
+    if not hmac.compare_digest(
+        str(payload.get("pwd", "")), security.password_fingerprint(user.hashed_password)
+    ):
+        return None
+    return user
