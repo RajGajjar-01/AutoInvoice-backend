@@ -156,6 +156,7 @@ def create_access_token(
     email: str,
     is_superuser: bool,
     is_verified: bool,
+    ver: int = 0,
     expires_delta: timedelta | None = None,
 ) -> str:
     now = get_datetime_utc()
@@ -173,11 +174,12 @@ def create_access_token(
         "email": email,
         "is_superuser": is_superuser,
         "is_verified": is_verified,
+        "ver": ver,
     }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
-def create_refresh_token(subject: str | Any) -> str:
+def create_refresh_token(subject: str | Any, ver: int = 0) -> str:
     now = get_datetime_utc()
     expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode = {
@@ -186,6 +188,7 @@ def create_refresh_token(subject: str | Any) -> str:
         "iss": ISSUER,
         "sub": str(subject),
         "type": "refresh",
+        "ver": ver,
     }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 

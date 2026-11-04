@@ -1,3 +1,4 @@
+import hmac
 import base64
 from dataclasses import dataclass
 from datetime import timedelta
@@ -129,12 +130,29 @@ def generate_verify_email(email_to: str, username: str, code: str) -> EmailData:
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_password_reset_token(email: str) -> str:
+def _password_fingerprint(hashed_password: str | None) -> str:
+    return hmac.new(
+        settings.SECRET_KEY.encode(), (hashed_password or "").encode(), "sha256"
+    ).hexdigest()[:32]
+
+
+def password_reset_token_is_current(token: str, hashed_password: str | None) -> bool:
+    """Reset links are single-use: they die once the password hash changes."""
+    try:
+        decoded = jwt.decode(token, settings.SECRET_KEY, algorithms=[security.ALGORITHM])
+    except InvalidTokenError:
+        return False
+    return hmac.compare_digest(
+        str(decoded.get("fp", "")), _password_fingerprint(hashed_password)
+    )
+
+
+def generate_password_reset_token(email: str, hashed_password: str | None = None) -> str:
     delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
     now = get_datetime_utc()
     expires = now + delta
     return jwt.encode(
-        {"exp": expires.timestamp(), "nbf": now, "sub": email},
+        {"exp": expires.timestamp(), "nbf": now, "sub": email, "fp": _password_fingerprint(hashed_password)},
         settings.SECRET_KEY,
         algorithm=security.ALGORITHM,
     )

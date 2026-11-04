@@ -16,8 +16,9 @@ def set_auth_cookies(response: Response, user: User) -> None:
         email=user.email,
         is_superuser=user.is_superuser,
         is_verified=user.is_verified,
+        ver=user.token_version,
     )
-    refresh_token = security.create_refresh_token(subject=user.id)
+    refresh_token = security.create_refresh_token(subject=user.id, ver=user.token_version)
     response.set_cookie(
         key="access_token",
         value=access_token,

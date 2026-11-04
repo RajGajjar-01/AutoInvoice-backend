@@ -24,6 +24,7 @@ class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str | None = Field(default=None)
     is_verified: bool = Field(default=False)
+    token_version: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     avatar_url: str | None = Field(default=None, max_length=500)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,

@@ -18,6 +18,7 @@ def _mock_user(overrides=None):
     u.hashed_password = "$argon2id$hash"
     u.full_name = "Test User"
     u.is_verified = True
+    u.token_version = 0
     u.avatar_url = None
     u.created_at = MagicMock()
     u.updated_at = MagicMock()
@@ -182,7 +183,7 @@ class TestForgotPassword:
 
         monkeypatch.setattr(
             "app.api.routes.auth.generate_password_reset_token",
-            lambda email: "reset_tok",
+            lambda email, **kw: "reset_tok",
         )
         monkeypatch.setattr(
             "app.api.routes.auth.generate_reset_password_email",
@@ -208,6 +209,10 @@ class TestResetPassword:
         monkeypatch.setattr(
             "app.api.routes.auth.verify_password_reset_token",
             lambda token: "user@test.com",
+        )
+        monkeypatch.setattr(
+            "app.api.routes.auth.password_reset_token_is_current",
+            lambda token, hashed: True,
         )
 
         r = client.post(
@@ -264,3 +269,14 @@ class TestAuthMe:
         r = client.get(f"{settings.API_V1_STR}/auth/me")
         assert r.status_code == 200
         assert r.json()["email"] == "user@test.com"
+
+
+def test_reset_token_is_single_use():
+    from app.services.email_service import (
+        generate_password_reset_token,
+        password_reset_token_is_current,
+    )
+
+    tok = generate_password_reset_token("a@b.com", "hash-1")
+    assert password_reset_token_is_current(tok, "hash-1")
+    assert not password_reset_token_is_current(tok, "hash-2")  # password changed

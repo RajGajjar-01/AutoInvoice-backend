@@ -52,15 +52,14 @@ def get_token_from_auth_header_or_cookie(
     authorization: Annotated[str | None, Depends(reusable_oauth2)] = None,
     access_token: Annotated[str | None, Cookie()] = None,
 ) -> str:
-    if access_token:
-        return access_token
-
-    if not authorization:
+    # Explicit Authorization header wins over an ambient cookie.
+    token = authorization or access_token
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
-    return authorization
+    return token
 
 
 TokenDep = Annotated[str, Depends(get_token_from_auth_header_or_cookie)]
@@ -103,6 +102,10 @@ async def get_current_user(session: SessionDep, token: TokenDep) -> User:
         raise HTTPException(status_code=404, detail="User not found")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    if payload.get("ver", 0) != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked"
+        )
     return user
 
 

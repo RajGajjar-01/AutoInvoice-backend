@@ -35,6 +35,7 @@ from app.services import google_oauth_service, verification_service
 from app.services.email_service import (
     generate_password_reset_token,
     generate_reset_password_email,
+    password_reset_token_is_current,
     generate_verify_email,
     send_email,
     verify_password_reset_token,
@@ -155,13 +156,33 @@ async def refresh_token(
     user = await session.get(User, user_uuid)
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    if payload.get("ver", 0) != user.token_version:
+        raise HTTPException(status_code=401, detail="Session revoked")
 
     set_auth_cookies(response, user)
     return Message(message="Token refreshed")
 
 
 @router.post("/logout", response_model=Message)
-def logout(response: Response) -> Message:
+async def logout(
+    response: Response,
+    session: SessionDep,
+    refresh_token: Annotated[str | None, Cookie()] = None,
+) -> Message:
+    # Revoke server-side too: bump token_version so stolen copies of the
+    # cookies stop working. Best effort; always clear the cookies.
+    if refresh_token:
+        try:
+            payload = jwt.decode(
+                refresh_token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+            )
+            user = await session.get(User, uuid.UUID(payload["sub"]))
+            if user and payload.get("type") == "refresh":
+                user.token_version += 1
+                session.add(user)
+                await session.commit()
+        except (InvalidTokenError, KeyError, ValueError):
+            pass
     clear_auth_cookies(response)
     return Message(message="Logged out successfully")
 
@@ -173,9 +194,13 @@ def get_current_user_info(current_user: CurrentUser) -> Any:
 
 @router.patch("/me", response_model=UserPublic)
 async def update_current_user(
-    current_user: CurrentUser, user_in: UserUpdateMe, user_service: UserServiceDep
+    response: Response,
+    current_user: CurrentUser,
+    user_in: UserUpdateMe,
+    user_service: UserServiceDep,
 ) -> Any:
     user = await user_service.update_me(current_user, user_in)
+    set_auth_cookies(response, user)  # email change bumps token_version
     return UserPublic.from_user(user)
 
 
@@ -237,7 +262,9 @@ async def forgot_password(
     _ = response
     user = await user_service.get_by_email(email)
     if user:
-        password_reset_token = generate_password_reset_token(email=email)
+        password_reset_token = generate_password_reset_token(
+            email=email, hashed_password=user.hashed_password
+        )
         if settings.emails_enabled:
             email_data = generate_reset_password_email(
                 email_to=user.email, email=email, token=password_reset_token
@@ -277,13 +304,18 @@ async def reset_password(
         raise HTTPException(status_code=400, detail="Invalid token")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    if not password_reset_token_is_current(body.token, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Invalid token")
     await user_service.update_password(user, body.new_password)
     return Message(message="Password updated successfully")
 
 
 @router.post("/update-password", response_model=Message)
 async def update_password(
-    current_user: CurrentUser, body: UpdatePassword, user_service: UserServiceDep
+    response: Response,
+    current_user: CurrentUser,
+    body: UpdatePassword,
+    user_service: UserServiceDep,
 ) -> Message:
     if current_user.hashed_password is None:
         raise HTTPException(
@@ -294,18 +326,23 @@ async def update_password(
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect current password")
 
-    await user_service.update_password(user, body.new_password)
+    user = await user_service.update_password(user, body.new_password)
+    set_auth_cookies(response, user)  # other sessions were revoked; keep this one
     return Message(message="Password updated successfully")
 
 
 @router.post("/set-password", response_model=Message)
 async def set_password(
-    current_user: CurrentUser, body: SetPassword, user_service: UserServiceDep
+    response: Response,
+    current_user: CurrentUser,
+    body: SetPassword,
+    user_service: UserServiceDep,
 ) -> Message:
     if current_user.hashed_password is not None:
         raise HTTPException(
             status_code=400,
             detail="This account already has a password. Use /auth/update-password instead.",
         )
-    await user_service.update_password(current_user, body.new_password)
+    user = await user_service.update_password(current_user, body.new_password)
+    set_auth_cookies(response, user)
     return Message(message="Password set successfully")

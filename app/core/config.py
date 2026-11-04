@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     OPENWA_API_KEY: str = ""
     OPENWA_SESSION_ID: str = ""
 
-    EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 48
+    EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 1
     EMAIL_VERIFICATION_CODE_EXPIRE_MINUTES: int = 10
 
     @computed_field  # type: ignore[prop-decorator]

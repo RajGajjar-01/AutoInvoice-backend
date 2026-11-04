@@ -81,7 +81,11 @@ class UserService:
     async def update_password(self, db_user: User, new_password: str) -> User:
         _validate_password(new_password)
         return await self.repo.update(
-            db_user, {"hashed_password": get_password_hash(new_password)}
+            db_user,
+            {
+                "hashed_password": get_password_hash(new_password),
+                "token_version": db_user.token_version + 1,
+            },
         )
 
     async def update_me(self, current_user: User, user_in: UserUpdateMe) -> User:
@@ -93,6 +97,7 @@ class UserService:
                 raise ConflictError("A user with this email already exists")
             update_data["email"] = user_in.email
             update_data["is_verified"] = False
+            update_data["token_version"] = current_user.token_version + 1
         if not update_data:
             return current_user
         return await self.repo.update(current_user, update_data)
@@ -184,6 +189,8 @@ class UserService:
             update_data["is_active"] = is_active
         if not update_data:
             return user
+        if update_data.keys() & {"email", "hashed_password", "is_active", "is_superuser"}:
+            update_data["token_version"] = user.token_version + 1
         return await self.repo.update(user, update_data)
 
     async def save_google_tokens(
