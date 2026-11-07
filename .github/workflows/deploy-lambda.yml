@@ -20,16 +20,23 @@ env:
   # Dummy values: Settings() must load, but tests and migrations need no real secrets.
   SECRET_KEY: ci-only-secret-0123456789
   ENVIRONMENT: local
+  UV_PYTHON: "3.13" # same Python as Dockerfile.lambda
   FIRST_SUPERUSER_PASSWORD: ci-only-pass-12345
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      redis: # one test needs a real Redis
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v10
 
       - name: Test
         run: uv run pytest tests/mock -q
@@ -46,7 +53,7 @@ jobs:
           DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
           DB_SSLMODE: require
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
