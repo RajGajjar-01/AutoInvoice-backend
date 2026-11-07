@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ doc_title }} {{ invoice_number }}</title>
+<style>
+  /* The footer is a running element: it is printed in the bottom margin
+     of every page, so long documents keep a footer on each page. */
+  @page {
+    size: A4;
+    margin: 0 0 {{ '0' if no_page_footer else '46px' }} 0;
+    @bottom-center { content: element(page-footer); vertical-align: bottom; width: 100%; }
+  }
+  .page-footer { position: running(page-footer); width: 100%; }
+  /* Browsers (the in-app preview) do not know running elements: show the
+     footer after the content there. WeasyPrint uses the print media type. */
+  @media screen {
+    body { display: flex; flex-direction: column; min-height: 100vh; }
+    .page-footer { order: 2; margin-top: auto; max-width: 794px; align-self: center; }
+    .page { width: 100%; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #fff; }
+  body {
+    /* Liberation Sans is metric-compatible with Arial. DejaVu Sans is the
+       fallback for glyphs it lacks, such as the rupee sign. */
+    font-family: Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
+    color: #1a1a1a;
+    font-size: 13px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .mono { font-family: "Liberation Mono", "DejaVu Sans Mono", monospace; }
+  .page { max-width: 794px; margin: 0 auto; background: #fff; position: relative; }
+  .push-bottom { page-break-inside: avoid; }
+  table { border-collapse: collapse; }
+  tr { page-break-inside: avoid; }
+  /* Table layout: WeasyPrint sizes nested flex rows badly. */
+  .two-col { display: table; width: 100%; table-layout: fixed; }
+  .two-col > div { display: table-cell; vertical-align: top; padding-right: 40px; }
+  .two-col > div:last-child { padding-right: 0; }
+  .draft-mark {
+    position: fixed; top: 45%; left: 0; right: 0; text-align: center;
+    font-size: 110px; font-weight: 900; color: rgba(148, 163, 184, 0.18);
+    transform: rotate(-30deg); letter-spacing: 12px;
+  }
+  {% block style %}{% endblock %}
+</style>
+</head>
+<body>
+{% if is_draft %}<div class="draft-mark">DRAFT</div>{% endif %}
+<div class="page-footer">{% block footer %}{% endblock %}</div>
+{% block body %}{% endblock %}
+</body>
+</html>

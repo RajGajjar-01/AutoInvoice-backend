@@ -91,15 +91,31 @@ def _mock_user_service(access_token="fake-google-access-token", side_effect=None
     )
 
 
+def _pdf_svc(pdf_bytes=b"pdf"):
+    return MagicMock(
+        render_html=MagicMock(return_value="<html></html>"),
+        html_to_pdf=MagicMock(return_value=pdf_bytes),
+    )
+
+
+def _no_active_template():
+    from app.exceptions import NotFoundError
+
+    return AsyncMock(get_active=AsyncMock(side_effect=NotFoundError("none")))
+
+
 def _setup_deps(mock_user, **overrides):
     app.dependency_overrides[deps.get_current_user] = lambda: mock_user
+    app.dependency_overrides[deps.get_current_principal] = lambda: mock_user
+    template_service = overrides.get("template_service", _no_active_template())
+    app.dependency_overrides[deps.get_invoice_template_service] = lambda: (
+        template_service
+    )
+    pdf_service = overrides.get("pdf_service", _pdf_svc())
+    app.dependency_overrides[deps.get_invoice_pdf_service] = lambda: pdf_service
     if "invoice_service" in overrides:
         app.dependency_overrides[deps.get_invoice_service] = lambda: overrides[
             "invoice_service"
-        ]
-    if "pdf_service" in overrides:
-        app.dependency_overrides[deps.get_invoice_pdf_service] = lambda: overrides[
-            "pdf_service"
         ]
     if "company_service" in overrides:
         app.dependency_overrides[deps.get_company_settings_service] = lambda: overrides[
@@ -136,7 +152,7 @@ class TestSendEmail:
         _setup_deps(
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
-            pdf_service=MagicMock(generate=MagicMock(return_value=b"%PDF-1.4 fake")),
+            pdf_service=_pdf_svc(b"%PDF-1.4 fake"),
             company_service=AsyncMock(get_for_owner=AsyncMock(return_value=company)),
             user_service=_mock_user_service(),
         )
@@ -170,7 +186,7 @@ class TestSendEmail:
         _setup_deps(
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
-            pdf_service=MagicMock(generate=MagicMock(return_value=b"pdf")),
+            pdf_service=_pdf_svc(b"pdf"),
             company_service=AsyncMock(get_for_owner=AsyncMock(return_value=company)),
             user_service=_mock_user_service(),
         )
@@ -265,11 +281,15 @@ class TestSendEmail:
             user_service=_mock_user_service(),
         )
 
-        r = client.post(
-            f"{settings.API_V1_STR}/invoices/{inv.id}/send-email",
-            json={"to_email": "customer@test.com"},
-        )
-        assert r.status_code == 404
+        with patch("app.api.routes.invoices.send_gmail_email") as mock_send:
+            r = client.post(
+                f"{settings.API_V1_STR}/invoices/{inv.id}/send-email",
+                json={"to_email": "customer@test.com"},
+            )
+        # No company settings: render with a blank company instead of failing.
+        assert r.status_code == 200
+        mock_send.assert_called_once()
+        assert mock_send.call_args.kwargs["subject"].endswith("from Your Business")
 
     def test_send_email_invoice_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
@@ -304,7 +324,7 @@ class TestSendWhatsApp:
         _setup_deps(
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
-            pdf_service=MagicMock(generate=MagicMock(return_value=b"pdf-data")),
+            pdf_service=_pdf_svc(b"pdf-data"),
             company_service=AsyncMock(get_for_owner=AsyncMock(return_value=company)),
             whatsapp_service=MagicMock(
                 send_document=MagicMock(return_value={"messageId": "wa_msg_123"})
@@ -331,7 +351,7 @@ class TestSendWhatsApp:
         _setup_deps(
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
-            pdf_service=MagicMock(generate=MagicMock(return_value=b"pdf")),
+            pdf_service=_pdf_svc(b"pdf"),
             company_service=AsyncMock(get_for_owner=AsyncMock(return_value=company)),
             whatsapp_service=wa_mock,
         )
@@ -353,7 +373,7 @@ class TestSendWhatsApp:
         _setup_deps(
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
-            pdf_service=MagicMock(generate=MagicMock(return_value=b"pdf")),
+            pdf_service=_pdf_svc(b"pdf"),
             company_service=AsyncMock(get_for_owner=AsyncMock(return_value=company)),
             whatsapp_service=wa_mock,
         )
@@ -396,6 +416,7 @@ class TestSendWhatsApp:
     def test_send_whatsapp_no_company(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
 
+        wa = MagicMock(send_document=MagicMock(return_value={"messageId": "m1"}))
         inv = _invoice()
         inv.customer = _customer()
 
@@ -407,13 +428,16 @@ class TestSendWhatsApp:
                     side_effect=NotFoundError("Company settings not found")
                 )
             ),
+            whatsapp_service=wa,
         )
 
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-whatsapp",
             json={"to_phone": "9876543210"},
         )
-        assert r.status_code == 404
+        # No company settings: render with a blank company instead of failing.
+        assert r.status_code == 200
+        wa.send_document.assert_called_once()
 
     def test_send_whatsapp_invoice_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
@@ -451,7 +475,7 @@ class TestSendReminder:
         _setup_deps(
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
-            pdf_service=MagicMock(generate=MagicMock(return_value=b"pdf")),
+            pdf_service=_pdf_svc(b"pdf"),
             company_service=AsyncMock(get_for_owner=AsyncMock(return_value=company)),
             whatsapp_service=wa_mock,
         )
@@ -478,7 +502,7 @@ class TestSendReminder:
         _setup_deps(
             mock_user,
             invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
-            pdf_service=MagicMock(generate=MagicMock(return_value=b"pdf")),
+            pdf_service=_pdf_svc(b"pdf"),
             company_service=AsyncMock(get_for_owner=AsyncMock(return_value=company)),
             whatsapp_service=wa_mock,
         )
@@ -508,6 +532,7 @@ class TestSendReminder:
     def test_send_reminder_no_company(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError
 
+        wa = MagicMock(send_document=MagicMock(return_value={"messageId": "m1"}))
         inv = _invoice()
         inv.customer = _customer()
 
@@ -519,13 +544,16 @@ class TestSendReminder:
                     side_effect=NotFoundError("Company settings not found")
                 )
             ),
+            whatsapp_service=wa,
         )
 
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-reminder",
             json={"to_phone": "9876543210"},
         )
-        assert r.status_code == 404
+        # No company settings: render with a blank company instead of failing.
+        assert r.status_code == 200
+        wa.send_document.assert_called_once()
 
     def test_send_reminder_invoice_not_found(self, client: TestClient, mock_user):
         from app.exceptions import NotFoundError

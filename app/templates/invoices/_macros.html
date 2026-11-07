@@ -1,0 +1,34 @@
+{# Shared pieces used by more than one invoice template. #}
+
+{% macro summary_rows(summary, label_style="", value_style="") -%}
+  {% for e in summary %}
+  <tr>
+    <td style="padding:6px 20px 6px 0;font-size:12px;color:#64748b;text-align:right;{{ label_style }}">{{ e.label }}</td>
+    <td class="mono" style="padding:6px 0;font-size:12px;text-align:right;color:{{ '#ef4444' if e.red else '#1a1a1a' }};{{ value_style }}">{{ e.value }}</td>
+  </tr>
+  {% endfor %}
+{%- endmacro %}
+
+{% macro bank_inline(bank) -%}
+  {%- set parts = [] -%}
+  {%- if bank.bank_name %}{% set _ = parts.append(("Bank", bank.bank_name)) %}{% endif -%}
+  {%- if bank.account_name %}{% set _ = parts.append(("A/C Name", bank.account_name)) %}{% endif -%}
+  {%- if bank.account_number %}{% set _ = parts.append(("A/C No", bank.account_number)) %}{% endif -%}
+  {%- if bank.ifsc %}{% set _ = parts.append(("IFSC", bank.ifsc)) %}{% endif -%}
+  {%- if bank.upi %}{% set _ = parts.append(("UPI", bank.upi)) %}{% endif -%}
+  {%- for label, value in parts -%}
+    {{ label }}: <strong>{{ value }}</strong>{% if not loop.last %} &nbsp;|&nbsp; {% endif %}
+  {%- endfor -%}
+{%- endmacro %}
+
+{% macro item_text(row, desc_color="#94a3b8") -%}
+  {{ row.name }}{% if row.hsn_code %} <span style="font-size:10px;color:{{ desc_color }}">(HSN {{ row.hsn_code }})</span>{% endif %}
+  {% if row.description %}<div style="font-size:10px;color:{{ desc_color }};margin-top:2px">{{ row.description }}</div>{% endif %}
+{%- endmacro %}
+
+{% macro qty(row) -%}{{ row.quantity }}{% if row.unit %} {{ row.unit }}{% endif %}{%- endmacro %}
+
+{% macro gst_lines(color="#9ca3af") -%}
+  {% if place_of_supply %}<p style="color:{{ color }};font-size:11px">Place of Supply: {{ place_of_supply }}</p>{% endif %}
+  {% if reverse_charge %}<p style="color:{{ color }};font-size:11px">Reverse Charge: Applicable</p>{% endif %}
+{%- endmacro %}

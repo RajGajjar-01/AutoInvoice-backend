@@ -69,13 +69,16 @@ def _invoice(document_type, **overrides):
 
 
 class TestInvoicePdfDocumentTypes:
-    def _render(self, invoice):
-        return InvoicePDFService().render_html(invoice, _customer(), _company())
+    def _render(self, invoice, template_id=None):
+        return InvoicePDFService().render_html(
+            invoice, _customer(), _company(), template_id
+        )
 
     def test_invoice_shows_pricing_and_title(self):
         html = self._render(_invoice(DocumentType.invoice))
-        assert "<h2>Invoice</h2>" in html
-        assert "Rate" in html and "Grand Total" in html
+        assert "<title>INVOICE INV-2607-1234</title>" in html
+        assert "Grand Total" in html and "Subtotal" in html
+        assert "\u20b9236.00" in html
         # invoice_number must not be double-prefixed with a hardcoded INV-
         assert "INV-INV" not in html
 
@@ -87,9 +90,9 @@ class TestInvoicePdfDocumentTypes:
                 valid_until=date(2026, 8, 18),
             )
         )
-        assert "<h2>Quotation</h2>" in html
-        assert "Valid Until: 2026-08-18" in html
-        assert "Grand Total" in html and "Rate" in html
+        assert "QUOTATION" in html
+        assert "Valid Until:</span> 2026-08-18" in html
+        assert "Grand Total" in html
         assert "DRAFT" in html
 
     def test_challan_hides_pricing_and_shows_delivery(self):
@@ -98,12 +101,15 @@ class TestInvoicePdfDocumentTypes:
                 DocumentType.challan,
                 vehicle_info="MH-12 AB 1234",
                 delivery_notes="Handle with care",
-            )
+            ),
+            "geometric",
         )
-        assert "<h2>Delivery Challan</h2>" in html
-        assert "Rate" not in html
+        # Challans use the challan layout whatever template is active.
+        assert "DELIVERY CHALLAN" in html
+        assert "QUANTITY" in html
         assert "Grand Total" not in html
         assert "Subtotal" not in html
+        assert "\u20b9" not in html
         assert "MH-12 AB 1234" in html
         assert "Handle with care" in html
 
@@ -116,7 +122,7 @@ class TestInvoicePdfDocumentTypes:
 
     def test_proforma_title_and_pricing(self):
         html = self._render(_invoice(DocumentType.proforma))
-        assert "<h2>Proforma Invoice</h2>" in html
+        assert "PROFORMA INVOICE" in html
         assert "Grand Total" in html
 
     def test_document_type_as_plain_string(self):
@@ -124,8 +130,8 @@ class TestInvoicePdfDocumentTypes:
         invoice = _invoice(DocumentType.challan)
         invoice.document_type = "challan"
         html = self._render(invoice)
-        assert "<h2>Delivery Challan</h2>" in html
-        assert "Rate" not in html
+        assert "DELIVERY CHALLAN" in html
+        assert "Grand Total" not in html
 
 
 class TestDocumentTypeSchema:
