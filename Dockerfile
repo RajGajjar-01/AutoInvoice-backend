@@ -42,6 +42,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libgdk-pixbuf-2.0-0 \
     libffi8 \
     fonts-liberation \
+    fonts-dejavu-core \
     shared-mime-info \
     && useradd --create-home --shell /bin/bash appuser
 
