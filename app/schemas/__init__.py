@@ -23,6 +23,7 @@ from app.schemas.customer import (
 from app.schemas.invoice import (
     DashboardStats,
     DocumentType,
+    InvoiceBankDetails,
     InvoiceCreate,
     InvoiceItemData,
     InvoicePublic,
@@ -113,6 +114,7 @@ __all__ = [
     "DashboardStats",
     "DocumentType",
     "InvoiceCreate",
+    "InvoiceBankDetails",
     "InvoiceItemData",
     "InvoicePublic",
     "InvoicesPublic",

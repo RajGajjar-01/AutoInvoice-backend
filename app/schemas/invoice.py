@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from enum import Enum
+from typing import Literal
 
 from sqlmodel import Field, SQLModel
 
@@ -32,6 +33,19 @@ class InvoiceItemData(SQLModel):
     tax: float = 0
     unit: str | None = None
     hsn_code: str | None = None
+    discount: float = Field(default=0, ge=0)
+    discount_type: Literal["percent", "flat"] | None = None
+
+
+class InvoiceBankDetails(SQLModel):
+    """Bank details printed on one invoice instead of the company defaults."""
+
+    bank_name: str | None = Field(default=None, max_length=100)
+    account_name: str | None = Field(default=None, max_length=255)
+    account_number: str | None = Field(default=None, max_length=50)
+    ifsc: str | None = Field(default=None, max_length=20)
+    branch: str | None = Field(default=None, max_length=100)
+    upi: str | None = Field(default=None, max_length=256)
 
 
 class InvoiceBase(SQLModel):
@@ -52,11 +66,20 @@ class InvoiceBase(SQLModel):
     reverse_charge: bool = False
     vehicle_info: str | None = Field(default=None, max_length=200)
     delivery_notes: str | None = Field(default=None, max_length=1000)
+    po_number: str | None = Field(default=None, max_length=100)
+    discount_type: str | None = Field(default=None, max_length=10)
+    discount_value: float = Field(default=0, ge=0)
+    shipping_charge: float = Field(default=0, ge=0)
+    extra_charge_label: str | None = Field(default=None, max_length=100)
+    extra_charge_amount: float = Field(default=0, ge=0)
+    round_off: bool = False
 
 
 class InvoiceCreate(InvoiceBase):
     customer_id: uuid.UUID
     items: list[InvoiceItemData] = []
+    discount_type: Literal["percent", "flat"] | None = None
+    bank_details: InvoiceBankDetails | None = None
 
 
 class InvoiceUpdate(SQLModel):
@@ -79,6 +102,14 @@ class InvoiceUpdate(SQLModel):
     delivery_notes: str | None = Field(default=None, max_length=1000)
     customer_id: uuid.UUID | None = None
     items: list[InvoiceItemData] | None = None
+    po_number: str | None = Field(default=None, max_length=100)
+    discount_type: Literal["percent", "flat"] | None = None
+    discount_value: float | None = Field(default=None, ge=0)
+    shipping_charge: float | None = Field(default=None, ge=0)
+    extra_charge_label: str | None = Field(default=None, max_length=100)
+    extra_charge_amount: float | None = Field(default=None, ge=0)
+    round_off: bool | None = None
+    bank_details: InvoiceBankDetails | None = None
 
 
 class InvoicePublic(InvoiceBase):

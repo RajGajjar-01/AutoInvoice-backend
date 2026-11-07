@@ -25,6 +25,11 @@ class Invoice(InvoiceBase, table=True):
     items: list[dict[str, Any]] = Field(
         default=[], sa_column=Column(JSONB, nullable=False, server_default="[]")
     )
+    # Per-invoice bank details. Sensitive values are encrypted by InvoiceService;
+    # the field is write-only in the API and is read only to render the PDF.
+    bank_details: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),
