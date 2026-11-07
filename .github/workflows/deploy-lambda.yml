@@ -1,0 +1,63 @@
+name: Deploy backend to Lambda
+
+on:
+  push:
+    branches: [main-serverless]
+  workflow_dispatch:
+
+concurrency:
+  group: lambda-deploy
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # lets the job ask AWS for a temporary pass (OIDC)
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPO: unifieddesk-backend
+  LAMBDA_FUNCTION: unifieddesk-backend
+  # Dummy values: Settings() must load, but tests and migrations need no real secrets.
+  SECRET_KEY: ci-only-secret-0123456789
+  ENVIRONMENT: local
+  FIRST_SUPERUSER_PASSWORD: ci-only-pass-12345
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Test
+        run: uv run pytest tests/mock -q
+        env:
+          POSTGRES_SERVER: localhost
+          POSTGRES_USER: u
+          POSTGRES_DB: d
+          POSTGRES_PASSWORD: x
+
+      # Runs BEFORE the new code goes live. Keep migrations backward-compatible.
+      - name: Migrate database
+        run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          DB_SSLMODE: require
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, push, update Lambda
+        run: |
+          IMAGE=${{ steps.ecr.outputs.registry }}/$ECR_REPO:${{ github.sha }}
+          docker build --provenance=false -f Dockerfile.lambda -t "$IMAGE" .
+          docker push "$IMAGE"
+          aws lambda update-function-code --function-name "$LAMBDA_FUNCTION" --image-uri "$IMAGE"
+          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION"
