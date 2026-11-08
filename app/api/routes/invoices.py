@@ -44,7 +44,11 @@ from app.services.invoice_pdf_service import (
 )
 from app.services.invoice_service import InvoiceService, decrypt_bank_details
 from app.services.invoice_template_service import InvoiceTemplateService
-from app.services.whatsapp_service import WhatsAppService
+from app.services.whatsapp_service import (
+    InvalidPhoneError,
+    WhatsAppService,
+    to_whatsapp_chat_id,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -185,11 +189,13 @@ async def _render_invoice_html(
     pdf_service: InvoicePDFService,
     template: str | None = None,
     invoice: Invoice | None = None,
+    company: CompanySettings | None = None,
 ) -> tuple[Invoice, CompanySettings, str]:
     """Load saved data, choose the template and render the document HTML."""
     if invoice is None:
         invoice = await _load_invoice(invoice_service, invoice_id, owner_id)
-    company = await _company_or_blank(company_settings_service, owner_id)
+    if company is None:
+        company = await _company_or_blank(company_settings_service, owner_id)
     template_id = await _template_for(template_service, owner_id, template)
     raw_bank = getattr(invoice, "bank_details", None)
     bank = (
@@ -302,6 +308,77 @@ def _resolve_whatsapp_service(
     return default
 
 
+WHATSAPP_NOT_SET_UP = (
+    "WhatsApp sending is not set up. Add your OpenWA server URL, API key and "
+    "session ID in Settings, then try again."
+)
+
+
+async def _send_invoice_on_whatsapp(
+    *,
+    owner_id: uuid.UUID,
+    invoice_id: uuid.UUID,
+    to_phone: str,
+    caption_for: Any,
+    invoice_service: InvoiceService,
+    company_settings_service: Any,
+    template_service: InvoiceTemplateService,
+    pdf_service: InvoicePDFService,
+    whatsapp_service: WhatsAppService,
+) -> dict[str, Any]:
+    """Check everything that can fail cheaply first, then render and send."""
+    invoice = await _load_invoice(invoice_service, invoice_id, owner_id)
+    company = await _company_or_blank(company_settings_service, owner_id)
+    wa_svc = _resolve_whatsapp_service(whatsapp_service, company)
+    if not wa_svc.is_configured:
+        raise HTTPException(status_code=503, detail=WHATSAPP_NOT_SET_UP)
+    try:
+        chat_id = to_whatsapp_chat_id(to_phone)
+    except InvalidPhoneError:
+        raise HTTPException(
+            status_code=422,
+            detail="The customer's phone number is not valid for WhatsApp. "
+            "Save it with the country code, for example +91 98765 43210.",
+        )
+
+    _, _, pdf_bytes = await _render_invoice_pdf(
+        owner_id=owner_id,
+        invoice_id=invoice_id,
+        invoice_service=invoice_service,
+        company_settings_service=company_settings_service,
+        template_service=template_service,
+        pdf_service=pdf_service,
+        invoice=invoice,
+        company=company,
+    )
+    doc_label = _document_label(invoice)
+    try:
+        result = await run_in_threadpool(
+            wa_svc.send_document,
+            chat_id=chat_id,
+            pdf_bytes=pdf_bytes,
+            filename=_pdf_filename(doc_label, invoice.invoice_number),
+            caption=caption_for(invoice, doc_label),
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            "OpenWA send failed", status=e.response.status_code, body=e.response.text
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="WhatsApp (OpenWA) refused the message. Check that your "
+            "OpenWA session is connected and the API key is correct.",
+        )
+    except httpx.HTTPError:
+        logger.exception("OpenWA unreachable")
+        raise HTTPException(
+            status_code=502,
+            detail="Could not reach your WhatsApp (OpenWA) server. Check the "
+            "server URL in Settings and that the server is running.",
+        )
+    return result if isinstance(result, dict) else {}
+
+
 @router.post("/{id}/send-email", status_code=200)
 async def send_invoice_email(
     *,
@@ -385,24 +462,18 @@ async def send_invoice_whatsapp(
     id: uuid.UUID,
     req: SendWhatsAppRequest,
 ) -> dict[str, Any]:
-    invoice, company, pdf_bytes = await _render_invoice_pdf(
+    result = await _send_invoice_on_whatsapp(
         owner_id=current_user.id,
         invoice_id=id,
+        to_phone=req.to_phone,
+        caption_for=lambda inv, label: (
+            f"{label} {inv.invoice_number} - {inv.currency} {inv.grand_total:,.2f}"
+        ),
         invoice_service=invoice_service,
         company_settings_service=company_settings_service,
         template_service=template_service,
         pdf_service=pdf_service,
-    )
-
-    doc_label = _document_label(invoice)
-    wa_svc = _resolve_whatsapp_service(whatsapp_service, company)
-
-    chat_id = f"{req.to_phone.lstrip('+')}@c.us"
-    result = wa_svc.send_document(
-        chat_id=chat_id,
-        pdf_bytes=pdf_bytes,
-        filename=_pdf_filename(doc_label, invoice.invoice_number),
-        caption=f"{doc_label} {invoice.invoice_number} - {invoice.currency} {invoice.grand_total:,.2f}",
+        whatsapp_service=whatsapp_service,
     )
     return {"message": "WhatsApp message sent", "message_id": result.get("messageId")}
 
@@ -419,29 +490,21 @@ async def send_invoice_reminder(
     id: uuid.UUID,
     req: SendReminderRequest,
 ) -> dict[str, Any]:
-    invoice, company, pdf_bytes = await _render_invoice_pdf(
+    def caption_for(inv: Invoice, label: str) -> str:
+        caption = f"Reminder: {label} {inv.invoice_number} is due. "
+        if req.days_overdue:
+            caption += f"({req.days_overdue} days overdue) "
+        return caption + f"Amount: {inv.currency} {inv.grand_total:,.2f}"
+
+    result = await _send_invoice_on_whatsapp(
         owner_id=current_user.id,
         invoice_id=id,
+        to_phone=req.to_phone,
+        caption_for=caption_for,
         invoice_service=invoice_service,
         company_settings_service=company_settings_service,
         template_service=template_service,
         pdf_service=pdf_service,
-    )
-
-    doc_label = _document_label(invoice)
-    wa_svc = _resolve_whatsapp_service(whatsapp_service, company)
-
-    chat_id = f"{req.to_phone.lstrip('+')}@c.us"
-
-    caption = f"Reminder: {doc_label} {invoice.invoice_number} is due. "
-    if req.days_overdue:
-        caption += f"({req.days_overdue} days overdue) "
-    caption += f"Amount: {invoice.currency} {invoice.grand_total:,.2f}"
-
-    result = wa_svc.send_document(
-        chat_id=chat_id,
-        pdf_bytes=pdf_bytes,
-        filename=_pdf_filename(doc_label, invoice.invoice_number),
-        caption=caption,
+        whatsapp_service=whatsapp_service,
     )
     return {"message": "Reminder sent", "message_id": result.get("messageId")}

@@ -146,6 +146,9 @@ class Settings(BaseSettings):
     OPENWA_BASE_URL: str = "http://localhost:2785"
     OPENWA_API_KEY: str = ""
     OPENWA_SESSION_ID: str = ""
+    # Added to phone numbers saved without a country code (e.g. 10-digit
+    # Indian mobiles) before they are sent to WhatsApp.
+    DEFAULT_PHONE_COUNTRY_CODE: str = "91"
 
     EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 1
     EMAIL_VERIFICATION_CODE_EXPIRE_MINUTES: int = 10

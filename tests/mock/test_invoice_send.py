@@ -489,7 +489,7 @@ class TestSendReminder:
         assert r.json()["message"] == "Reminder sent"
         _, kwargs = wa_mock.send_document.call_args
         assert "5 days overdue" in kwargs["caption"]
-        assert kwargs["chat_id"] == "9876543210@c.us"
+        assert kwargs["chat_id"] == "919876543210@c.us"
 
     def test_send_reminder_without_overdue(self, client: TestClient, mock_user):
         inv = _invoice()
@@ -679,3 +679,107 @@ class TestSendEmailServiceAttachment:
             attachment=None,
         )
         mock_brevo_post.assert_not_called()
+
+
+class TestWhatsAppChatId:
+    def test_ten_digit_number_gets_default_country_code(self):
+        from app.services.whatsapp_service import to_whatsapp_chat_id
+
+        assert to_whatsapp_chat_id("98765 43210") == "919876543210@c.us"
+
+    def test_number_with_country_code_is_kept(self):
+        from app.services.whatsapp_service import to_whatsapp_chat_id
+
+        assert to_whatsapp_chat_id("+91 98765-43210") == "919876543210@c.us"
+        assert to_whatsapp_chat_id("+1 (415) 555-0100") == "14155550100@c.us"
+        assert to_whatsapp_chat_id("0044 20 7946 0958") == "442079460958@c.us"
+
+    def test_trunk_zero_is_replaced(self):
+        from app.services.whatsapp_service import to_whatsapp_chat_id
+
+        assert to_whatsapp_chat_id("09876543210") == "919876543210@c.us"
+
+    def test_invalid_numbers_are_rejected(self):
+        import pytest
+
+        from app.services.whatsapp_service import InvalidPhoneError, to_whatsapp_chat_id
+
+        for bad in ("", "12345", "abc", "1" * 16):
+            with pytest.raises(InvalidPhoneError):
+                to_whatsapp_chat_id(bad)
+
+
+class TestWhatsAppFailures:
+    def _deps(self, mock_user, wa, pdf=None):
+        inv = _invoice()
+        inv.customer = _customer()
+        pdf = pdf or _pdf_svc()
+        _setup_deps(
+            mock_user,
+            invoice_service=_mock_invoice_svc(get_with_customer_return=inv),
+            pdf_service=pdf,
+            company_service=AsyncMock(get_for_owner=AsyncMock(return_value=_company())),
+            whatsapp_service=wa,
+        )
+        return inv, pdf
+
+    def test_not_set_up_returns_503_without_rendering(
+        self, client: TestClient, mock_user
+    ):
+        from app.services.whatsapp_service import WhatsAppService
+
+        wa = WhatsAppService(
+            base_url="http://localhost:2785", api_key="", session_id=""
+        )
+        inv, pdf = self._deps(mock_user, wa)
+        r = client.post(
+            f"{settings.API_V1_STR}/invoices/{inv.id}/send-whatsapp",
+            json={"to_phone": "9876543210"},
+            headers={"Origin": "http://localhost:5173"},
+        )
+        assert r.status_code == 503
+        assert "not set up" in r.json()["detail"]
+        assert r.headers.get("access-control-allow-origin") == "http://localhost:5173"
+        pdf.html_to_pdf.assert_not_called()
+
+    def test_unreachable_openwa_returns_502(self, client: TestClient, mock_user):
+        import httpx
+
+        wa = MagicMock(
+            is_configured=True,
+            send_document=MagicMock(side_effect=httpx.ConnectError("refused")),
+        )
+        inv, _ = self._deps(mock_user, wa)
+        r = client.post(
+            f"{settings.API_V1_STR}/invoices/{inv.id}/send-reminder",
+            json={"to_phone": "9876543210"},
+        )
+        assert r.status_code == 502
+        assert "Could not reach" in r.json()["detail"]
+
+    def test_openwa_rejection_returns_502(self, client: TestClient, mock_user):
+        import httpx
+
+        request = httpx.Request("POST", "https://wa.example.com")
+        error = httpx.HTTPStatusError(
+            "401", request=request, response=httpx.Response(401, request=request)
+        )
+        wa = MagicMock(is_configured=True, send_document=MagicMock(side_effect=error))
+        inv, _ = self._deps(mock_user, wa)
+        r = client.post(
+            f"{settings.API_V1_STR}/invoices/{inv.id}/send-whatsapp",
+            json={"to_phone": "9876543210"},
+        )
+        assert r.status_code == 502
+        assert "refused" in r.json()["detail"]
+
+    def test_invalid_phone_returns_422(self, client: TestClient, mock_user):
+        wa = MagicMock(is_configured=True)
+        inv, pdf = self._deps(mock_user, wa)
+        r = client.post(
+            f"{settings.API_V1_STR}/invoices/{inv.id}/send-whatsapp",
+            json={"to_phone": "12345"},
+        )
+        assert r.status_code == 422
+        wa.send_document.assert_not_called()
+        pdf.html_to_pdf.assert_not_called()
