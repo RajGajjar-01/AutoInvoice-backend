@@ -732,14 +732,18 @@ class TestWhatsAppFailures:
             base_url="http://localhost:2785", api_key="", session_id=""
         )
         inv, pdf = self._deps(mock_user, wa)
+        # Use an origin the running config allows (it differs locally and in CI).
+        origin = settings.all_cors_origins[0] if settings.all_cors_origins else None
         r = client.post(
             f"{settings.API_V1_STR}/invoices/{inv.id}/send-whatsapp",
             json={"to_phone": "9876543210"},
-            headers={"Origin": "http://localhost:5173"},
+            headers={"Origin": origin} if origin else {},
         )
         assert r.status_code == 503
         assert "not set up" in r.json()["detail"]
-        assert r.headers.get("access-control-allow-origin") == "http://localhost:5173"
+        if origin:
+            # A handled error keeps CORS headers, so the browser can read it.
+            assert r.headers.get("access-control-allow-origin") == origin
         pdf.html_to_pdf.assert_not_called()
 
     def test_unreachable_openwa_returns_502(self, client: TestClient, mock_user):
